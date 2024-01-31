@@ -497,6 +497,8 @@ class MPMSolver:
 
         self.last_time_final_particles[None] = self.n_particles[None]
 
+
+
     @ti.kernel
     def p2g(self, dt: ti.f32):
         ti.no_activate(self.particle)
@@ -518,11 +520,6 @@ class MPMSolver:
             w = [0.5 * (1.5 - fx)**2, 0.75 - (fx - 1)**2, 0.5 * (fx - 0.5)**2]
             # Deformation gradient update
             F = self.F[p]
-            if self.material[p] == self.material_water:  # liquid
-                F = ti.Matrix.identity(ti.f32, self.dim)
-                if ti.static(self.support_plasticity):
-                    F[0, 0] = self.Jp[p]
-                    
             F = (ti.Matrix.identity(ti.f32, self.dim) + dt * self.C[p]) @ F
             # Hardening coefficient: snow gets harder when compressed
             h = 1.0
@@ -533,50 +530,24 @@ class MPMSolver:
                     p] == self.material_elastic:  # the smaller, the softer
                 h = 100 # make it really stiff so that it acts like rigid body
             mu, la = self.mu_0_list[p] * h, self.lambda_0_list[p] * h
-            # print('mu, ', mu)
-            if self.material[p] == self.material_water:  # liquid
-                mu = 0.0
             U, sig, V = ti.svd(F)
             J = 1.0
-            if self.material[p] != self.material_sand:
-                for d in ti.static(range(self.dim)):
-                    new_sig = sig[d, d]
-                    if self.material[p] == self.material_snow:  # Snow
-                        new_sig = min(max(sig[d, d], 1 - 2.5e-2),
-                                      1 + 4.5e-3)  # Plasticity
-                    if ti.static(self.support_plasticity):
-                        self.Jp[p] *= sig[d, d] / new_sig
-                    sig[d, d] = new_sig
-                    J *= new_sig
-            if self.material[p] == self.material_water:
-                # Reset deformation gradient to avoid numerical instability
-                F = ti.Matrix.identity(ti.f32, self.dim)
-                F[0, 0] = J
+
+            for d in ti.static(range(self.dim)):
+                new_sig = sig[d, d]
+                if self.material[p] == self.material_snow:  # Snow
+                    new_sig = min(max(sig[d, d], 1 - 2.5e-2),
+                                    1 + 4.5e-3)  # Plasticity
                 if ti.static(self.support_plasticity):
-                    self.Jp[p] = J
-            elif self.material[p] == self.material_snow:
-                # Reconstruct elastic deformation gradient after plasticity
-                F = U @ sig @ V.transpose()
+                    self.Jp[p] *= sig[d, d] / new_sig
+                sig[d, d] = new_sig
+                J *= new_sig
             stress = ti.Matrix.zero(ti.f32, self.dim, self.dim)
 
-            if self.material[p] != self.material_sand:
-                stress = 2 * mu * (F - U @ V.transpose()) @ F.transpose(
-                ) + ti.Matrix.identity(ti.f32, self.dim) * la * J * (J - 1)
-            else:
-                if ti.static(self.support_plasticity):
-                    sig = self.sand_projection(sig, p)
-                    F = U @ sig @ V.transpose()
-                    log_sig_sum = 0.0
-                    center = ti.Matrix.zero(ti.f32, self.dim, self.dim)
-                    for i in ti.static(range(self.dim)):
-                        log_sig_sum += ti.log(sig[i, i])
-                        center[i, i] = 2.0 * self.mu_0 * ti.log(
-                            sig[i, i]) * (1 / sig[i, i])
-                    for i in ti.static(range(self.dim)):
-                        center[i,
-                               i] += self.lambda_0 * log_sig_sum * (1 /
-                                                                    sig[i, i])
-                    stress = U @ center @ V.transpose() @ F.transpose()
+
+            stress = 2 * mu * (F - U @ V.transpose()) @ F.transpose(
+            ) + ti.Matrix.identity(ti.f32, self.dim) * la * J * (J - 1)
+
             self.F[p] = F
 
             stress = (-dt * self.p_vol * 4 * self.inv_dx**2) * stress
@@ -595,6 +566,59 @@ class MPMSolver:
                 self.grid_v[base + offset] += weight * (mass * self.v[p] +
                                                         affine @ dpos)
                 self.grid_m[base + offset] += weight * mass
+
+                self.grid_v[base + offset] += dt * 0
+
+
+    @ti.kernel
+    def g2p(self, dt: ti.f32):
+        ti.loop_config(block_dim=256)
+        if ti.static(self.use_bls):
+            for d in ti.static(range(self.dim)):
+                ti.block_local(self.grid_v.get_scalar_field(d))
+        ti.no_activate(self.particle)
+        avg_v = ti.Vector.zero(ti.f32, self.dim)
+        counter = 0
+        for I in ti.grouped(self.pid):
+            p = self.pid[I]
+            base = ti.floor(self.x[p] * self.inv_dx - 0.5).cast(int)
+            Im = ti.rescale_index(self.pid, self.grid_m, I)
+            for D in ti.static(range(self.dim)):
+                base[D] = ti.assume_in_range(base[D], Im[D], 0, 1)
+            fx = self.x[p] * self.inv_dx - base.cast(float)
+            w = [
+                0.5 * (1.5 - fx)**2, 0.75 - (fx - 1.0)**2, 0.5 * (fx - 0.5)**2
+            ]
+            new_v = ti.Vector.zero(ti.f32, self.dim)
+            new_C = ti.Matrix.zero(ti.f32, self.dim, self.dim)
+            # Loop over 3x3 grid node neighborhood
+            for offset in ti.static(ti.grouped(self.stencil_range())):
+                dpos = offset.cast(float) - fx
+                g_v = self.grid_v[base + offset]
+                weight = 1.0
+                for d in ti.static(range(self.dim)):
+                    weight *= w[offset[d]][d]
+                new_v += weight * g_v
+                new_C += 4 * self.inv_dx * weight * g_v.outer_product(dpos)
+            if self.material[p] != self.material_stationary: 
+                self.v[p], self.C[p] = new_v, new_C
+                # tracking center position and velocity
+                if self.material[p] == self.material_elastic & all(self.x[p] == self.fan_center[None]):
+                    self.x[p] += dt * self.v[p]
+                    self.fan_center[None] = self.x[p]
+                    self.fan_vel[None] = self.v[p]
+                else:
+                    self.x[p] += dt * self.v[p]  # advection
+            # apply rotation in the rod region
+            if (self.material[p] == self.material_elastic) & (self.omega[None] != 0.0):
+                dist_center = ti.math.distance(self.x[p], self.fan_center[None]) # distance from center to particle
+                norm_vect = ti.math.normalize(self.x[p] - self.fan_center[None]) # normalized vector from center to particle
+                current_omega = ((self.v[p] - self.fan_vel[None]) * ti.Vector([-norm_vect[1], norm_vect[0]]))/dist_center # current angular velocity relative to center
+                if 0 < dist_center < self.rod_radius: # inside rod region
+                    self.v[p] += (self.omega[None]-current_omega) * dist_center * ti.Vector([-norm_vect[1], norm_vect[0]]) # make v = omega * r
+                    #self.x[p] += dt * self.v[p]
+        self.omega[None] = 0.0 # reset omega to 0
+
 
     @ti.kernel
     def grid_normalization_and_gravity(self, dt: ti.f32, grid_v: ti.template(),
@@ -704,54 +728,7 @@ class MPMSolver:
             lambda t, dt, grid_v: self.grid_bounding_box(
                 t, dt, unbounded, grid_v))
 
-    @ti.kernel
-    def g2p(self, dt: ti.f32):
-        ti.loop_config(block_dim=256)
-        if ti.static(self.use_bls):
-            for d in ti.static(range(self.dim)):
-                ti.block_local(self.grid_v.get_scalar_field(d))
-        ti.no_activate(self.particle)
-        avg_v = ti.Vector.zero(ti.f32, self.dim)
-        counter = 0
-        for I in ti.grouped(self.pid):
-            p = self.pid[I]
-            base = ti.floor(self.x[p] * self.inv_dx - 0.5).cast(int)
-            Im = ti.rescale_index(self.pid, self.grid_m, I)
-            for D in ti.static(range(self.dim)):
-                base[D] = ti.assume_in_range(base[D], Im[D], 0, 1)
-            fx = self.x[p] * self.inv_dx - base.cast(float)
-            w = [
-                0.5 * (1.5 - fx)**2, 0.75 - (fx - 1.0)**2, 0.5 * (fx - 0.5)**2
-            ]
-            new_v = ti.Vector.zero(ti.f32, self.dim)
-            new_C = ti.Matrix.zero(ti.f32, self.dim, self.dim)
-            # Loop over 3x3 grid node neighborhood
-            for offset in ti.static(ti.grouped(self.stencil_range())):
-                dpos = offset.cast(float) - fx
-                g_v = self.grid_v[base + offset]
-                weight = 1.0
-                for d in ti.static(range(self.dim)):
-                    weight *= w[offset[d]][d]
-                new_v += weight * g_v
-                new_C += 4 * self.inv_dx * weight * g_v.outer_product(dpos)
-            if self.material[p] != self.material_stationary: 
-                self.v[p], self.C[p] = new_v, new_C
-                # tracking center position and velocity
-                if self.material[p] == self.material_elastic & all(self.x[p] == self.fan_center[None]):
-                    self.x[p] += dt * self.v[p]
-                    self.fan_center[None] = self.x[p]
-                    self.fan_vel[None] = self.v[p]
-                else:
-                    self.x[p] += dt * self.v[p]  # advection
-            # apply rotation in the rod region
-            if (self.material[p] == self.material_elastic) & (self.omega[None] != 0.0):
-                dist_center = ti.math.distance(self.x[p], self.fan_center[None]) # distance from center to particle
-                norm_vect = ti.math.normalize(self.x[p] - self.fan_center[None]) # normalized vector from center to particle
-                current_omega = ((self.v[p] - self.fan_vel[None]) * ti.Vector([-norm_vect[1], norm_vect[0]]))/dist_center # current angular velocity relative to center
-                if 0 < dist_center < self.rod_radius: # inside rod region
-                    self.v[p] += (self.omega[None]-current_omega) * dist_center * ti.Vector([-norm_vect[1], norm_vect[0]]) # make v = omega * r
-                    #self.x[p] += dt * self.v[p]
-        self.omega[None] = 0.0 # reset omega to 0
+
                 
                 
     @ti.kernel

@@ -2,3 +2,4 @@
 *.npy
 
 /out*
+*/_pycache_/*
