@@ -6,53 +6,33 @@ import argparse
 import os
 
 
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-o', '--out-dir', type=str, help='Output folder')
-    args = parser.parse_args()
-    print(args)
-    return args
 
-args = parse_args()
 
-write_to_disk = args.out_dir is not None
-if write_to_disk:
-    try:
-        os.mkdir(f'{args.out_dir}')
-    except:
-        pass
-
+out_dir = 'out_jupyter'
+ti.reset()
 ti.init(arch=ti.cuda)  # Try to run on GPU
 
 gui = ti.GUI("Taichi Elements", res=512, background_color=0x112F41)
 
-mpm = MPMSolver(res=(256, 256), E_scale=1)
-mpm.set_gravity([0, -9.81])
+mpm = MPMSolver(res=(256, 256), E_scale=0.001, use_g2p2g=False)
+mpm.set_gravity([0, 0])
 
-E1 = 1e3
-E2 = 1e6
+E1 = 1e6
+E2 = 1e3
+
 
 mpm.add_cube(
-    lower_corner=[0.1,0.2],
-    cube_size=[0.2,0.2],
+    lower_corner=[0.45,0.45],
+    cube_size=[0.1,0.1],
     velocity=[0, 0],
-    sample_density=1,
+    sample_density=0.5,
     material=mpm.material_elastic,
     E=E1,
     nu=0.2
 )
-mpm.add_cube(
-    lower_corner=[0.7,0.2],
-    cube_size=[0.2,0.2],
-    velocity=[0, 0],
-    sample_density=1,
-    material=mpm.material_elastic,
-    E=E2,
-    nu=0.2
-)
-for frame in range(200):
-    mpm.step(8e-3)
+for frame in range(1):
+    mpm.step(8e-3, print_stat=False)
     particles = mpm.particle_info()
     print(mpm.fan_center, mpm.t, mpm.omega)
     gui.circles(particles['position'], radius=1.5, color=particles['color'])
-    gui.show(f'{args.out_dir}/{frame:06d}.png' if write_to_disk else None)
+    gui.show(f'{out_dir}/{frame:06d}.png')

@@ -567,7 +567,16 @@ class MPMSolver:
                                                         affine @ dpos)
                 self.grid_m[base + offset] += weight * mass
 
-                self.grid_v[base + offset] += dt * 0
+                # self.grid_v[base + offset] += dt * -0.01 * [1, -1]
+                # ti.profiler.print_kernel_profiler_info()
+                # try:
+                #     ti.profiler.print_memory_profiler_info()
+                # except:
+                #     pass
+                # print(base)
+                # print(offset)
+                # print(weight)
+                # print(mass)
 
 
     @ti.kernel
@@ -579,6 +588,7 @@ class MPMSolver:
         ti.no_activate(self.particle)
         avg_v = ti.Vector.zero(ti.f32, self.dim)
         counter = 0
+        print('gridv', self.grid_v)
         for I in ti.grouped(self.pid):
             p = self.pid[I]
             base = ti.floor(self.x[p] * self.inv_dx - 0.5).cast(int)
@@ -599,6 +609,7 @@ class MPMSolver:
                 for d in ti.static(range(self.dim)):
                     weight *= w[offset[d]][d]
                 new_v += weight * g_v
+                new_v += dt * [1, 1] * -1
                 new_C += 4 * self.inv_dx * weight * g_v.outer_product(dpos)
             if self.material[p] != self.material_stationary: 
                 self.v[p], self.C[p] = new_v, new_C
