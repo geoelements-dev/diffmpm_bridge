@@ -37,11 +37,11 @@ def rolling_gaussian_generator(velocity, frequency, node_x_locs, N=5, resolution
     t = np.linspace(-t_width, t_width, resolution, endpoint=False)
     _, _, e = gausspulse(t, fc=fc)
 
-    t_pad = np.array([-t_width - 1e-16, t_width + 1e-16])
-    e_pad = np.array([0, 0])
+    # t_pad = np.array([-t_width - 1e-16, t_width + 1e-16])
+    # e_pad = np.array([0, 0])
 
-    t = np.concatenate([t_pad[:1], t, t_pad[1:]])
-    e = np.concatenate([e_pad[:1], e, e_pad[1:]])
+    # t = np.concatenate([t_pad[:1], t, t_pad[1:]])
+    # e = np.concatenate([e_pad[:1], e, e_pad[1:]])
 
     xvalues = t + time_to_center[:, np.newaxis]
     fxvalues = e
