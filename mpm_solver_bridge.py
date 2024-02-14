@@ -5,34 +5,33 @@ import matplotlib.pyplot as plt
 
 ti.reset()
 real = ti.f32
-ti.init(arch=ti.cuda, default_fp=real, device_memory_GB=6)
+ti.init(arch=ti.cuda, default_fp=real, device_memory_GB=12)
 
 # init parameters
 size = 1
-
 dim = 2
 N = 60  # reduce to 30 if run out of GPU memory
 n_particles = N * N
 n_grid = 120
 dx = 1 / n_grid
 inv_dx = 1 / dx
-dt_scale = 1
+dt_scale = 1e0
 dt = 2e-2 * dx / size * dt_scale
+dt = 3e-4
 p_mass = 1
 p_vol = 1
-
-E = ti.field(dtype=real, shape=(), needs_grad=True)
-E[None] = 100
-
-
-nu = 0.2
-mu = E[None] / (2 * (1 + nu))
-la = E[None] * nu / ((1 + nu) * (1 - 2 * nu))
+# E = ti.field(dtype=real, shape=(), needs_grad=True)
+# nu = 0.2
+# mu = ti.field(dtype=real, shape=(), needs_grad=True)
+# la = ti.field(dtype=real, shape=(), needs_grad=True)
+# E[None] = 100
+E = 100
+mu = E
+la = E
 max_steps = 1024
 steps = max_steps
-gravity = 0.0
-
-
+gravity = 0
+target = [0.3, 0.5]
 
 scalar = lambda: ti.field(dtype=real)
 vec = lambda: ti.Vector.field(dim, dtype=real)
@@ -42,11 +41,11 @@ x = ti.Vector.field(dim,
                     dtype=real,
                     shape=(max_steps, n_particles),
                     needs_grad=True)
+x_avg = ti.Vector.field(dim, dtype=real, shape=(), needs_grad=True)
 v = ti.Vector.field(dim,
                     dtype=real,
                     shape=(max_steps, n_particles),
                     needs_grad=True)
-
 grid_v_in = ti.Vector.field(dim,
                             dtype=real,
                             shape=(max_steps, n_grid, n_grid),
@@ -58,7 +57,6 @@ grid_v_out = ti.Vector.field(dim,
 grid_m_in = ti.field(dtype=real,
                      shape=(max_steps, n_grid, n_grid),
                      needs_grad=True)
-
 C = ti.Matrix.field(dim,
                     dim,
                     dtype=real,
@@ -69,7 +67,6 @@ F = ti.Matrix.field(dim,
                     dtype=real,
                     shape=(max_steps, n_particles),
                     needs_grad=True)
-
 strain = ti.Matrix.field(dim,
                          dim,
                          dtype=real,
@@ -77,12 +74,11 @@ strain = ti.Matrix.field(dim,
                          needs_grad=True)
 init_v = ti.Vector.field(dim, dtype=real, shape=(), needs_grad=True)
 loss = ti.field(dtype=real, shape=(), needs_grad=True)
-dist = ti.Matrix.field(dim, 
-                       dim,
-                       dtype=real, 
-                       shape=(), 
-                       needs_grad=True)
 
+@ti.kernel
+def set_v():
+    for i in range(n_particles):
+        v[0, i] = init_v[None]
 
 @ti.kernel
 def p2g(f: ti.i32):
@@ -94,12 +90,13 @@ def p2g(f: ti.i32):
         F[f + 1, p] = new_F
         J = (new_F).determinant()
         r, s = ti.polar_decompose(new_F)
+        # cauchy = 2 * E[None] / (2 * (1 + nu)) * (new_F - r) @ new_F.transpose() + \
+        #          ti.Matrix.diag(2, E[None] * nu / ((1 + nu) * (1 - 2 * nu)) * (J - 1) * J)
         cauchy = 2 * mu * (new_F - r) @ new_F.transpose() + \
                  ti.Matrix.diag(2, la * (J - 1) * J)
         stress = -(dt * p_vol * 4 * inv_dx * inv_dx) * cauchy
         affine = stress + p_mass * C[f, p]
-        strain[f, p] = 0.5 * (new_F.transpose() + new_F - ti.math.eye(dim))
-
+        strain[f, p] += 0.5 * (new_F.transpose() @ new_F - ti.math.eye(dim))
         for i in ti.static(range(3)):
             for j in ti.static(range(3)):
                 offset = ti.Vector([i, j])
@@ -140,7 +137,7 @@ def g2p(f: ti.i32):
         for i in ti.static(range(3)):
             for j in ti.static(range(3)):
                 dpos = ti.cast(ti.Vector([i, j]), real) - fx
-                g_v = grid_v_out[f, base[0] + i, base[1] + j] # + dt * 
+                g_v = grid_v_out[f, base[0] + i, base[1] + j]
                 weight = w[i][0] * w[j][1]
                 new_v += weight * g_v
                 new_C += 4 * weight * g_v.outer_product(dpos) * inv_dx
@@ -150,9 +147,43 @@ def g2p(f: ti.i32):
         C[f + 1, p] = new_C
 
 @ti.kernel
-def set_v():
+def compute_x_avg():
     for i in range(n_particles):
-        v[0, i] = init_v[None]
+        x_avg[None] += (1 / n_particles) * x[steps - 1, i]
+
+@ti.kernel
+def compute_loss():
+    for i in range(steps - 1):
+        for j in range(n_particles):
+            dist = (1 / ((steps - 1) * n_particles)) * \
+                (target_x[i, j] - x[i, j]) ** 2
+            loss[None] += 0.5 * (dist[0] + dist[1])
+    # dist = (x_avg[None] - ti.Vector(target))**2
+    # loss[None] = 0.5 * (dist[0] + dist[1])
+
+def substep(s):
+    p2g(s)
+    grid_op(s)
+    g2p(s)
+
+# @ti.kernel
+# def set_E():
+#     mu[None] = E[None] / (2 * (1 + nu))
+#     la[None] = E[None] * nu / ((1 + nu) * (1 - 2 * nu))
+    # print(mu, la)
+
+@ti.kernel
+def reset_sim():
+    strain.fill(0)
+    grid_m_in.fill(0)
+    grid_v_in.fill(0)
+
+    # for i in range(n_particles):
+    #     F[0, i] = [[1, 0], [0, 1]]
+
+    for i in range(N):
+        for j in range(N):
+            x[0, i * N + j] = [(i)/N, (j)/N]
 
 # f_ext_scale = 1   
 # velocity = 4
@@ -174,100 +205,108 @@ def set_v():
 #         grid_v_ext[t, node, node] = [0, f_ext_scale * e[t, node]]
 
 
-init_v[None] = [2, 2]
+
+init_v[None] = [0.3, 0.6]
 
 
+for i in range(n_particles):
+    F[0, i] = [[1, 0], [0, 1]]
 
-def substep(s):
-    p2g(s)
-    grid_op(s)
-    g2p(s)
+for i in range(N):
+    for j in range(N):
+        x[0, i * N + j] = [dx * (i * 0.7 + 10), dx * (j * 0.7 + 25)]
 
 
+# for i in range(N):
+#     for j in range(N):
+#         x[0, i * N + j] = [(i)/N, (j)/(N)]
 
-@ti.kernel
-def reset_sim():
-    print(mu, la)
-    strain.fill(0)
-    grid_m_in.fill(0)
-    grid_v_in.fill(0)
-
-    for i in range(n_particles):
-        F[0, i] = [[1, 0], [0, 1]]
-
-    for i in range(N):
-        for j in range(N):
-            x[0, i * N + j] = [(i)/N, (j)/N]
-@ti.kernel
-def compute_loss():
-    for i in range(steps):
-        for j in range(n_particles):
-            loss[None] += (0.5 * (target_strain[i, j] - strain[i, j]) ** 2).sum()
-    
 
 
 
 
 print('running target sim')
-reset_sim()
+# reset_sim()
 set_v()
+# set_E()
 
 for s in range(steps):
     substep(s)
 
-target_strain = strain
+# print('loading target')
+# target_x = x
+# target_strain = strain
+# target_strain_np = np.load('target_strain_simple.npy')
+target_x_np = np.load('x_simple.npy')
+target_x = ti.Vector.field(dim,
+                           dtype=real,
+                           shape=(max_steps, n_particles),
+                           needs_grad=True)
+
+@ti.kernel
+def load_target(target: ti.types.ndarray()):
+    for i, j, k in ti.ndrange(steps, n_particles, dim):
+        target_x[i, j][k] = target[i, j, k]
+
+load_target(target_x_np)
+
+
 # gui = ti.GUI("Taichi Elements", (640, 640), background_color=0x112F41)
 # out_dir = 'out_test'
 
 # frame = 0
+# x_np = x.to_numpy()
 # for s in range(steps):
 #     scale = 4
 #     gui.circles(x_np[s], color=0xFFFFFF, radius=1.5)
 #     gui.show(f'{out_dir}/{frame:06d}.png')
 #     frame += 1
 
-np.save('x_np.npy', x.to_numpy())
-np.save('grid_v_in.npy', grid_v_in.to_numpy())
-np.save('grid_v_out.npy', grid_v_out.to_numpy())
+# np.save('x_simple.npy', x.to_numpy())
+# np.save('grid_v_in.npy', grid_v_in.to_numpy())
+# np.save('grid_v_out.npy', grid_v_out.to_numpy())
 # np.save('grid_v_ext.npy', grid_v_ext.to_numpy())
-np.save('strain.npy', strain.to_numpy())
-np.save('target_strain.npy', target_strain.to_numpy())
+# np.save('strain.npy', strain.to_numpy())
+# np.save('target_strain_simple.npy', target_strain.to_numpy())
 
-ti.reset()
-ti.init(arch=ti.cuda, default_fp=real, device_memory_GB=6)
-
-E[None] = 95
-nu = 0.2
-mu = E[None] / (2 * (1 + nu))
-la = E[None] * nu / ((1 + nu) * (1 - 2 * nu))
-
+# target_strain = strain
+# E[None] = 95
 grad_iterations = 30
 
 losses = []
-
+vs = []
+init_v[None] = [0, 0]
 print('running grad iterations')
 for i in range(grad_iterations):
-    reset_sim()
-    set_v()
-
+    grid_v_in.fill(0)
+    grid_m_in.fill(0)
+    loss[None] = 0
+    x_avg[None] = [0, 0]
     with ti.ad.Tape(loss=loss):
-        for s in range(steps):
+        # reset_sim()
+        set_v()
+        for s in range(steps - 1):
             substep(s)
-        
+        compute_x_avg()
         compute_loss()
 
     l = loss[None]
     losses.append(l)
-    grad = E.grad[None]
-    learning_rate = 10
-    E[None] -= learning_rate * grad
-    print('loss=', l, 
-          '   grad=', grad,
-          '   E=', E[None])
-
+    
+    # grad = E.grad[None]
+    grad = init_v.grad[None]
+    # learning_rate = 1e-5
+    # E[None] -= learning_rate * grad
+    learning_rate = 1e1
+    init_v[None][0] -= learning_rate * grad[0]
+    init_v[None][1] -= learning_rate * grad[1]
+    vs.append(grad)
+    # print('loss=', l, 
+    #       '   grad=', grad,
+    #       '   E=', E[None])
+    print('loss=', l, '   grad=', (grad[0], grad[1]), '   v=', init_v[None])
 print('done')
-
-plt.title("Optimization of E")
+plt.title("Optimization of $V_0$")
 plt.ylabel("Loss")
 plt.xlabel("Gradient Descent Iterations")
 plt.plot(losses)

@@ -123,7 +123,6 @@ def g2p(f: ti.i32):
                 g_v = grid_v_out[f, base[0] + i, base[1] + j]
                 weight = w[i][0] * w[j][1]
                 new_v += weight * g_v
-                print('gv: ', g_v)
                 new_C += 4 * weight * g_v.outer_product(dpos) * inv_dx
 
         v[f + 1, p] = new_v
