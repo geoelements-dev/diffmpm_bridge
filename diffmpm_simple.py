@@ -1,5 +1,6 @@
 import taichi as ti
 import matplotlib.pyplot as plt
+import numpy as np
 
 real = ti.f32
 ti.init(arch=ti.cuda, default_fp=real, device_memory_GB=1.5)
@@ -162,7 +163,7 @@ set_v()
 
 losses = []
 img_count = 0
-
+vs = np.zeros((30, dim))
 gui = ti.GUI("Simple Differentiable MPM Solver", (640, 640), 0xAAAAAA)
 
 for i in range(30):
@@ -180,8 +181,10 @@ for i in range(30):
 
     l = loss[None]
     losses.append(l)
+    v = init_v[None]
+    vs[i, :] = np.array([v[0], v[1]])
     grad = init_v.grad[None]
-    print('loss=', l, '   grad=', (grad[0], grad[1]))
+    print('loss=', l, '   grad=', (grad[0], grad[1]), '   v=', init_v[None])
     learning_rate = 10
     init_v[None][0] -= learning_rate * grad[0]
     init_v[None][1] -= learning_rate * grad[1]
@@ -199,4 +202,27 @@ plt.title("Optimization of Initial Velocity")
 plt.ylabel("Loss")
 plt.xlabel("Gradient Descent Iterations")
 plt.plot(losses)
+plt.show()
+
+plt.title("Optimization of $V_0$ via $x(t)$ (Single Step)")
+plt.ylabel("Loss")
+plt.xlabel("Gradient Descent Iterations")
+plt.plot(losses)
+plt.yscale('log')
+plt.show()
+
+plt.title("$V_{0,x}$ Learning Curve via $x(t)$ (Single Step)")
+plt.ylabel("$V_{0,x}$")
+plt.xlabel("Iterations")
+plt.hlines(0.3, 0, 30, color='r', label='True Value')
+plt.plot(vs[:,0], color='b', label='Estimated Value')
+plt.legend()
+plt.show()
+
+plt.title("$V_{0,y}$ Learning Curve via $x(t)$ (Single Step)")
+plt.ylabel("$V_{0,y}$")
+plt.xlabel("Iterations")
+plt.hlines(0.6, 0, 30, color='r', label='True Value')
+plt.plot(vs[:,1], color='b', label='Estimated Value')
+plt.legend()
 plt.show()

@@ -31,7 +31,7 @@ la = E
 max_steps = 1024
 steps = max_steps
 gravity = 0
-target = [0.3, 0.5]
+target = [0.3, 0.6]
 
 scalar = lambda: ti.field(dtype=real)
 vec = lambda: ti.Vector.field(dim, dtype=real)
@@ -111,8 +111,8 @@ bound = 3
 @ti.kernel
 def grid_op(f: ti.i32):
     for i, j in ti.ndrange(n_grid, n_grid):     
-        inv_m = 1 / (grid_m_in[f, i, j] + 1e-10)
-        v_out = inv_m * grid_v_in[f, i, j] # + dt * grid_v_ext[f, i, j]
+        inv_m = 1 / (grid_m_in[f, i, j] + 1e-10) # + dt * grid_v_ext[f, i, j])
+        v_out = inv_m * grid_v_in[f, i, j] 
         v_out[1] -= dt * gravity
         if i < bound and v_out[0] < 0:
             v_out[0] = 0
@@ -156,8 +156,8 @@ def compute_loss():
     for i in range(steps - 1):
         for j in range(n_particles):
             dist = (1 / ((steps - 1) * n_particles)) * \
-                (target_x[i, j] - x[i, j]) ** 2
-            loss[None] += 0.5 * (dist[0] + dist[1])
+                (target_strain[i, j] - strain[i, j]) ** 2
+            loss[None] += 0.5 * (dist[0, 0] + dist[1, 1])
     # dist = (x_avg[None] - ti.Vector(target))**2
     # loss[None] = 0.5 * (dist[0] + dist[1])
 
@@ -236,19 +236,26 @@ for s in range(steps):
 # print('loading target')
 # target_x = x
 # target_strain = strain
-# target_strain_np = np.load('target_strain_simple.npy')
+target_strain_np = np.load('target_strain_simple.npy')
 target_x_np = np.load('x_simple.npy')
 target_x = ti.Vector.field(dim,
+                           dtype=real,
+                           shape=(max_steps, n_particles),
+                           needs_grad=True)
+target_strain = ti.Matrix.field(dim,
+                            dim,
                            dtype=real,
                            shape=(max_steps, n_particles),
                            needs_grad=True)
 
 @ti.kernel
 def load_target(target: ti.types.ndarray()):
-    for i, j, k in ti.ndrange(steps, n_particles, dim):
-        target_x[i, j][k] = target[i, j, k]
+    # for i, j, k in ti.ndrange(steps, n_particles, dim):
+    #     target_x[i, j][k] = target[i, j, k]
+    for i, j, k, l in ti.ndrange(steps, n_particles, dim, dim):
+        target_strain[i, j][k, l] = target[i, j, k, l]
 
-load_target(target_x_np)
+load_target(target_strain_np)
 
 
 # gui = ti.GUI("Taichi Elements", (640, 640), background_color=0x112F41)
@@ -274,7 +281,7 @@ load_target(target_x_np)
 grad_iterations = 30
 
 losses = []
-vs = []
+vs = np.zeros((grad_iterations, dim))
 init_v[None] = [0, 0]
 print('running grad iterations')
 for i in range(grad_iterations):
@@ -292,7 +299,7 @@ for i in range(grad_iterations):
 
     l = loss[None]
     losses.append(l)
-    
+    v = init_v[None]
     # grad = E.grad[None]
     grad = init_v.grad[None]
     # learning_rate = 1e-5
@@ -300,14 +307,33 @@ for i in range(grad_iterations):
     learning_rate = 1e1
     init_v[None][0] -= learning_rate * grad[0]
     init_v[None][1] -= learning_rate * grad[1]
-    vs.append(grad)
+    vs[i, :] = np.array([v[0], v[1]])
     # print('loss=', l, 
     #       '   grad=', grad,
     #       '   E=', E[None])
     print('loss=', l, '   grad=', (grad[0], grad[1]), '   v=', init_v[None])
 print('done')
-plt.title("Optimization of $V_0$")
+# vs = np.vstack(np.array(vs))
+print(vs)
+plt.title("Optimization of $V_0$ via $x(t)$ (Single Step)")
 plt.ylabel("Loss")
 plt.xlabel("Gradient Descent Iterations")
 plt.plot(losses)
+plt.yscale('log')
+plt.show()
+
+plt.title("$V_{0,x}$ Learning Curve via $x(t)$ (Single Step)")
+plt.ylabel("$V_{0,x}$")
+plt.xlabel("Iterations")
+plt.hlines(0.3, 0, 30, color='r', label='True Value')
+plt.plot(vs[:,0], color='b', label='Estimated Value')
+plt.legend()
+plt.show()
+
+plt.title("$V_{0,y}$ Learning Curve via $x(t)$ (Single Step)")
+plt.ylabel("$V_{0,y}$")
+plt.xlabel("Iterations")
+plt.hlines(0.6, 0, 30, color='r', label='True Value')
+plt.plot(vs[:,1], color='b', label='Estimated Value')
+plt.legend()
 plt.show()
