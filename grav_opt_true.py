@@ -30,7 +30,7 @@ mu = E
 la = E
 max_steps = 1024
 steps = max_steps
-gravity = 0
+gravity = 10
 # target = [0.3, 0.6]
 
 scalar = lambda: ti.field(dtype=real)
@@ -118,7 +118,7 @@ def grid_op(f: ti.i32):
     for i, j in ti.ndrange(n_grid, n_grid):     
         inv_m = 1 / (grid_m_in[f, i, j] + 1e-10) # + dt * grid_v_ext[f, i, j])
         v_out = inv_m * grid_v_in[f, i, j] 
-        v_out[1] -= dt * init_g[None]
+        v_out[1] -= dt * gravity
         if i < bound and v_out[0] < 0:
             v_out[0] = 0
         if i > n_grid - bound and v_out[0] > 0:
@@ -167,8 +167,6 @@ def compute_loss():
     # loss[None] = 0.5 * (dist[0] + dist[1])
 
 def substep(s):
-    # if s == 0:
-    #     print(init_g[None])
     p2g(s)
     grid_op(s)
     g2p(s)
@@ -232,37 +230,37 @@ for i in range(N):
 
 
 
-# print('running target sim')
+print('running target sim')
 # reset_sim()
 # set_v()
 
 
-# for s in range(steps):
-#     substep(s)
+for s in range(steps):
+    substep(s)
 
-print('loading target')
+# print('loading target')
 # target_x = x
 # target_strain = strain
 # target_strain_np = np.load('target_strain_simple.npy')
-target_x_np = np.load('x_grav.npy')
-target_x = ti.Vector.field(dim,
-                           dtype=real,
-                           shape=(max_steps, n_particles),
-                           needs_grad=True)
+# target_x_np = np.load('x_grav.npy')
+# target_x = ti.Vector.field(dim,
+#                            dtype=real,
+#                            shape=(max_steps, n_particles),
+#                            needs_grad=True)
 # target_strain = ti.Matrix.field(dim,
 #                             dim,
 #                            dtype=real,
 #                            shape=(max_steps, n_particles),
 #                            needs_grad=True)
 
-@ti.kernel
-def load_target(target_np: ti.types.ndarray()):
-    for i, j, k in ti.ndrange(steps, n_particles, dim):
-        target_x[i, j][k] = target_np[i, j, k]
-    # for i, j, k, l in ti.ndrange(steps, n_particles, dim, dim):
-    #     target_ti[i, j][k, l] = target_np[i, j, k, l]
+# @ti.kernel
+# def load_target(target_np: ti.types.ndarray()):
+#     for i, j, k in ti.ndrange(steps, n_particles, dim):
+#         target_x[i, j][k] = target_np[i, j, k]
+#     # for i, j, k, l in ti.ndrange(steps, n_particles, dim, dim):
+#     #     target_ti[i, j][k, l] = target_np[i, j, k, l]
 
-load_target(target_x_np)
+# load_target(target_x_np)
 
 
 # gui = ti.GUI("Taichi Elements", (640, 640), background_color=0x112F41)
@@ -276,72 +274,10 @@ load_target(target_x_np)
 #     gui.show(f'{out_dir}/{frame:06d}.png')
 #     frame += 1
 
-# np.save('x_grav.npy', x.to_numpy())
+np.save('x_grav.npy', x.to_numpy())
 # np.save('grid_v_in.npy', grid_v_in.to_numpy())
 # np.save('grid_v_out.npy', grid_v_out.to_numpy())
 # np.save('grid_v_ext.npy', grid_v_ext.to_numpy())
-# np.save('strain.npy', strain.to_numpy())
+np.save('strain_grav.npy', strain.to_numpy())
 # np.save('target_strain_simple.npy', target_strain.to_numpy())
 
-
-init_g[None] = 9.5
-grad_iterations = 30
-
-losses = []
-gs = np.zeros((grad_iterations))
-# init_v[None] = [0, 0]
-print('running grad iterations')
-for i in range(grad_iterations):
-    grid_v_in.fill(0)
-    grid_m_in.fill(0)
-    loss[None] = 0
-#     x_avg[None] = [0, 0]
-    with ti.ad.Tape(loss=loss):
-        # reset_sim()
-        # set_v()
-        for s in range(steps - 1):
-            substep(s)
-        compute_x_avg()
-        compute_loss()
-
-    l = loss[None]
-    losses.append(l)
-#     v = init_v[None]
-    g = init_g[None]
-    grad = init_g.grad[None]
-#     grad = init_v.grad[None]
-    learning_rate = 1e6
-    init_g[None] -= learning_rate * grad
-#     learning_rate = 1e1
-#     init_v[None][0] -= learning_rate * grad[0]
-#     init_v[None][1] -= learning_rate * grad[1]
-    gs[i] = np.array([g])
-    print('loss=', l, 
-          '   grad=', grad,
-          '   g=', init_g[None])
-#     print('loss=', l, '   grad=', (grad[0], grad[1]), '   v=', init_v[None])
-# print('done')
-# # vs = np.vstack(np.array(vs))
-print(gs)
-plt.title("Optimization of $g$ via $x(t)$")
-plt.ylabel("Loss")
-plt.xlabel("Gradient Descent Iterations")
-plt.plot(losses)
-plt.yscale('log')
-plt.show()
-
-plt.title("Learning Curve via $x(t)$")
-plt.ylabel("$g$")
-plt.xlabel("Iterations")
-plt.hlines(10, 0, 30, color='r', label='True Value')
-plt.plot(gs, color='b', label='Estimated Value')
-plt.legend()
-plt.show()
-
-# plt.title("$V_{0,y}$ Learning Curve via $x(t)$ (Single Step)")
-# plt.ylabel("$V_{0,y}$")
-# plt.xlabel("Iterations")
-# plt.hlines(0.6, 0, 30, color='r', label='True Value')
-# plt.plot(vs[:,1], color='b', label='Estimated Value')
-# plt.legend()
-# plt.show()
