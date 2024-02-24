@@ -224,7 +224,7 @@ for i in range(n_particles):
 
 for i in range(N):
     for j in range(N):
-        x[0, i * N + j] = [(i)/(4*N), (j)/(4*N)]
+        x[0, i * N + j] = [(i)/(4*N) + 0.125, (j)/(4*N) + 0.01]
 
 
 
@@ -275,9 +275,5 @@ for s in range(steps):
 #     frame += 1
 
 np.save('x_grav.npy', x.to_numpy())
-# np.save('grid_v_in.npy', grid_v_in.to_numpy())
-# np.save('grid_v_out.npy', grid_v_out.to_numpy())
-# np.save('grid_v_ext.npy', grid_v_ext.to_numpy())
 np.save('strain_grav.npy', strain.to_numpy())
-# np.save('target_strain_simple.npy', target_strain.to_numpy())
 
