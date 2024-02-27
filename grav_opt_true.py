@@ -30,7 +30,7 @@ mu = E
 la = E
 max_steps = 1024
 steps = max_steps
-gravity = 10
+gravity = 100
 # target = [0.3, 0.6]
 
 scalar = lambda: ti.field(dtype=real)
@@ -263,17 +263,17 @@ for s in range(steps):
 # load_target(target_x_np)
 
 
-# gui = ti.GUI("Taichi Elements", (640, 640), background_color=0x112F41)
-# out_dir = 'out_test'
+gui = ti.GUI("Taichi Elements", (640, 640), background_color=0x112F41)
+out_dir = 'out_test'
 
-# frame = 0
-# x_np = x.to_numpy()
-# for s in range(steps):
-#     scale = 4
-#     gui.circles(x_np[s], color=0xFFFFFF, radius=1.5)
-#     gui.show(f'{out_dir}/{frame:06d}.png')
-#     frame += 1
+frame = 0
+x_np = x.to_numpy()
+for s in range(steps):
+    scale = 4
+    gui.circles(x_np[s], color=0xFFFFFF, radius=1.5)
+    gui.show(f'{out_dir}/{frame:06d}.png')
+    frame += 1
 
-np.save('x_grav.npy', x.to_numpy())
-np.save('strain_grav.npy', strain.to_numpy())
+# np.save('x_grav.npy', x.to_numpy())
+# np.save('strain_grav.npy', strain.to_numpy())
 
