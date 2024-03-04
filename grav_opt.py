@@ -161,8 +161,8 @@ def compute_loss():
     for i in range(steps - 1):
         for j in range(n_particles):
             dist = (1 / ((steps - 1) * n_particles)) * \
-                (target_strain[i, j] - strain[i, j]) ** 2
-            loss[None] += 0.5 * (dist[0, 0] + dist[1, 1])
+                (target_x[i, j] - x[i, j]) ** 2
+            loss[None] += 0.5 * (dist[0] + dist[1])
     # dist = (x_avg[None] - ti.Vector(target))**2
     # loss[None] = 0.5 * (dist[0] + dist[1])
 
@@ -226,7 +226,7 @@ for i in range(n_particles):
 
 for i in range(N):
     for j in range(N):
-        x[0, i * N + j] = [(i)/(4*N), (j)/(4*N)]
+        x[0, i * N + j] = [(i)/(4*N) + 0.125, (j)/(4*N)]
 
 
 
@@ -243,7 +243,7 @@ for i in range(N):
 print('loading target')
 # target_x = x
 # target_strain = strain
-target_strain_np = np.load('target_strain_simple.npy')
+target_strain_np = np.load('strain_grav.npy')
 target_x_np = np.load('x_grav.npy')
 target_x = ti.Vector.field(dim,
                            dtype=real,
@@ -257,12 +257,12 @@ target_strain = ti.Matrix.field(dim,
 
 @ti.kernel
 def load_target(target_np: ti.types.ndarray()):
-    # for i, j, k in ti.ndrange(steps, n_particles, dim):
-    #     target_x[i, j][k] = target_np[i, j, k]
-    for i, j, k, l in ti.ndrange(steps, n_particles, dim, dim):
-        target_strain[i, j][k, l] = target_np[i, j, k, l]
+    for i, j, k in ti.ndrange(steps, n_particles, dim):
+        target_x[i, j][k] = target_np[i, j, k]
+    # for i, j, k, l in ti.ndrange(steps, n_particles, dim, dim):
+    #     target_strain[i, j][k, l] = target_np[i, j, k, l]
 
-load_target(target_strain_np)
+load_target(target_x_np)
 
 
 # gui = ti.GUI("Taichi Elements", (640, 640), background_color=0x112F41)
@@ -285,7 +285,7 @@ load_target(target_strain_np)
 
 
 init_g[None] = 9.5
-grad_iterations = 30
+grad_iterations = 50
 
 losses = []
 gs = np.zeros((grad_iterations))
@@ -301,7 +301,7 @@ for i in range(grad_iterations):
         # set_v()
         for s in range(steps - 1):
             substep(s)
-        # compute_x_avg()
+        compute_x_avg()
         compute_loss()
 
     l = loss[None]
@@ -310,7 +310,7 @@ for i in range(grad_iterations):
     g = init_g[None]
     grad = init_g.grad[None]
 #     grad = init_v.grad[None]
-    learning_rate = 1e3
+    learning_rate = 1e7
     init_g[None] -= learning_rate * grad
 #     learning_rate = 1e1
 #     init_v[None][0] -= learning_rate * grad[0]
@@ -323,17 +323,17 @@ for i in range(grad_iterations):
 # print('done')
 # # vs = np.vstack(np.array(vs))
 print(gs)
-plt.title("Optimization of $g$ via $\epsilon(t)$")
+plt.title("Optimization of $g$ via $x(t)$")
 plt.ylabel("Loss")
 plt.xlabel("Gradient Descent Iterations")
 plt.plot(losses)
 plt.yscale('log')
 plt.show()
 
-plt.title("Learning Curve via $\epsilon(t)$")
+plt.title("Learning Curve via $x(t)$")
 plt.ylabel("$g$")
 plt.xlabel("Iterations")
-plt.hlines(10, 0, 30, color='r', label='True Value')
+plt.hlines(10, 0, grad_iterations, color='r', label='True Value')
 plt.plot(gs, color='b', label='Estimated Value')
 plt.legend()
 plt.show()

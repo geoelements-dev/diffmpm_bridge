@@ -30,7 +30,7 @@ mu = E
 la = E
 max_steps = 1024
 steps = max_steps
-gravity = 100
+gravity = 10
 # target = [0.3, 0.6]
 
 scalar = lambda: ti.field(dtype=real)
@@ -224,7 +224,7 @@ for i in range(n_particles):
 
 for i in range(N):
     for j in range(N):
-        x[0, i * N + j] = [(i)/(4*N) + 0.125, (j)/(4*N) + 0.01]
+        x[0, i * N + j] = [(i)/(4*N) + 0.125, (j)/(4*N)]
 
 
 
@@ -263,17 +263,20 @@ for s in range(steps):
 # load_target(target_x_np)
 
 
-gui = ti.GUI("Taichi Elements", (640, 640), background_color=0x112F41)
-out_dir = 'out_test'
+# gui = ti.GUI("Taichi Elements", (640, 640), background_color=0x112F41)
+# out_dir = 'out_test'
 
-frame = 0
-x_np = x.to_numpy()
-for s in range(steps):
-    scale = 4
-    gui.circles(x_np[s], color=0xFFFFFF, radius=1.5)
-    gui.show(f'{out_dir}/{frame:06d}.png')
-    frame += 1
+# frame = 0
+# x_np = x.to_numpy()
+# for s in range(steps):
+#     scale = 4
+#     gui.circles(x_np[s], color=0xFFFFFF, radius=1.5)
+#     gui.show(f'{out_dir}/{frame:06d}.png')
+#     frame += 1
 
-# np.save('x_grav.npy', x.to_numpy())
-# np.save('strain_grav.npy', strain.to_numpy())
-
+np.save('x_grav.npy', x.to_numpy())
+# np.save('grid_v_in.npy', grid_v_in.to_numpy())
+# np.save('grid_v_out.npy', grid_v_out.to_numpy())
+# np.save('grid_v_ext.npy', grid_v_ext.to_numpy())
+np.save('strain_grav.npy', strain.to_numpy())
+# np.save('target_strain_simple.npy', target_strain.to_numpy())
