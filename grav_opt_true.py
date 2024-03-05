@@ -72,6 +72,11 @@ strain = ti.Matrix.field(dim,
                          dtype=real,
                          shape=(max_steps, n_particles),
                          needs_grad=True)
+strain2 = ti.Matrix.field(dim,
+                         dim,
+                         dtype=real,
+                         shape=(max_steps, n_particles),
+                         needs_grad=True)
 init_v = ti.Vector.field(dim, dtype=real, shape=(), needs_grad=True)
 loss = ti.field(dtype=real, shape=(), needs_grad=True)
 init_g = ti.field(dtype=real, shape=(), needs_grad=True)
@@ -147,6 +152,37 @@ def g2p(f: ti.i32):
                 new_v += weight * g_v
                 new_C += 4 * weight * g_v.outer_product(dpos) * inv_dx
 
+
+        grad = ti.Matrix([[0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]])
+        vi = ti.Matrix([[0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]])
+        dstrain = ti.Matrix([[0.0, 0.0], [0.0, 0.0]])
+
+        grad[0, 0] = -0.25 * (1 - fx[1])
+        grad[1, 0] = 0.25 * (1 - fx[1])
+        grad[2, 0] = 0.25 * (1 + fx[1])
+        grad[3, 0] = -0.25 * (1 + fx[1])
+
+        grad[0, 1] = -0.25 * (1 - fx[0])
+        grad[1, 1] = -0.25 * (1 + fx[0])
+        grad[2, 1] = 0.25 * (1 + fx[0])
+        grad[3, 1] = 0.25 * (1 - fx[0])
+
+        vi[0, 0] = grid_v_out[f, base[0], base[1]][0]
+        vi[1, 0] = grid_v_out[f, base[0] + 1, base[1]][0]
+        vi[2, 0] = grid_v_out[f, base[0] + 1, base[1] + 1][0]
+        vi[3, 0] = grid_v_out[f, base[0], base[1] + 1][0]
+
+        vi[0, 1] = grid_v_out[f, base[0], base[1]][1]
+        vi[1, 1] = grid_v_out[f, base[0] + 1, base[1]][1]
+        vi[2, 1] = grid_v_out[f, base[0] + 1, base[1] + 1][1]
+        vi[3, 1] = grid_v_out[f, base[0], base[1] + 1][1]
+        
+        for i in ti.static(range(2)):
+            for j in ti.static(range(2)):
+                for k in ti.static(range(4)):
+                    dstrain[i, j] += 0.5 * (grad[k, i] * vi[k, j] + grad[k, j] * vi[k, i])
+   
+        strain2[f + 1, p] = strain2[f, p] + dstrain
         v[f + 1, p] = new_v
         x[f + 1, p] = x[f, p] + dt * v[f + 1, p]
         C[f + 1, p] = new_C
@@ -279,4 +315,5 @@ np.save('x_grav.npy', x.to_numpy())
 # np.save('grid_v_out.npy', grid_v_out.to_numpy())
 # np.save('grid_v_ext.npy', grid_v_ext.to_numpy())
 np.save('strain_grav.npy', strain.to_numpy())
+np.save('strain_grav2.npy', strain2.to_numpy())
 # np.save('target_strain_simple.npy', target_strain.to_numpy())

@@ -118,7 +118,7 @@ bound = 3
 @ti.kernel
 def grid_op(f: ti.i32):
     for i, j in ti.ndrange(n_grid, n_grid):     
-        inv_m = 1 / (grid_m_in[f, i, j] + 1e-10) # + dt * grid_v_ext[f, i, j])
+        inv_m = 1 / (grid_m_in[f, i, j] + 1e-10) + dt * grid_v_ext[f, i, j])
         v_out = inv_m * grid_v_in[f, i, j] 
         v_out[1] -= dt * gravity
         if i < bound and v_out[0] < 0:
@@ -196,8 +196,11 @@ def compute_loss():
     for i in range(steps - 1):
         for j in range(n_particles):
             dist = (1 / ((steps - 1) * n_particles)) * \
-                (target_strain[i, j] - strain[i, j]) ** 2
-            loss[None] += 0.5 * (dist[0, 0] + dist[1, 1])
+                (target_x[i, j] - x[i, j]) ** 2
+            loss[None] += 0.5 * (dist[0] + dist[1])
+            # dist = (1 / ((steps - 1) * n_particles)) * \
+            #     (target_strain[i, j] - strain[i, j]) ** 2
+            # loss[None] += 0.5 * (dist[0, 0] + dist[1, 1])
     # dist = (x_avg[None] - ti.Vector(target))**2
     # loss[None] = 0.5 * (dist[0] + dist[1])
 
@@ -274,47 +277,44 @@ for s in range(steps):
     substep(s)
 
 # print('loading target')
-# target_x = x
-# target_strain = strain
-# target_strain_np = np.load('target_strain_simple.npy')
+# # target_x = x
+# # target_strain = strain
+# # target_strain_np = np.load('target_strain_simple.npy')
 # target_x_np = np.load('x_simple.npy')
 # target_x = ti.Vector.field(dim,
 #                            dtype=real,
 #                            shape=(max_steps, n_particles),
 #                            needs_grad=True)
-# target_strain = ti.Matrix.field(dim,
-#                             dim,
-#                            dtype=real,
-#                            shape=(max_steps, n_particles),
-#                            needs_grad=True)
+# # target_strain = ti.Matrix.field(dim,
+# #                             dim,
+# #                            dtype=real,
+# #                            shape=(max_steps, n_particles),
+# #                            needs_grad=True)
 
 # @ti.kernel
-# def load_target(target: ti.types.ndarray()):
-#     # for i, j, k in ti.ndrange(steps, n_particles, dim):
-#     #     target_x[i, j][k] = target[i, j, k]
-#     for i, j, k, l in ti.ndrange(steps, n_particles, dim, dim):
-#         target_strain[i, j][k, l] = target[i, j, k, l]
+# def load_target(target_np: ti.types.ndarray()):
+#     for i, j, k in ti.ndrange(steps, n_particles, dim):
+#         target_x[i, j][k] = target_np[i, j, k]
+#     # for i, j, k, l in ti.ndrange(steps, n_particles, dim, dim):
+#     #     target_strain[i, j][k, l] = target_np[i, j, k, l]
 
-# load_target(target_strain_np)
+# load_target(target_x_np)
 
 
-# gui = ti.GUI("Taichi Elements", (640, 640), background_color=0x112F41)
-# out_dir = 'out_test'
+gui = ti.GUI("Taichi Elements", (640, 640), background_color=0x112F41)
+out_dir = 'out_test'
 
-# frame = 0
-# x_np = x.to_numpy()
-# for s in range(steps):
-#     scale = 4
-#     gui.circles(x_np[s], color=0xFFFFFF, radius=1.5)
-#     gui.show(f'{out_dir}/{frame:06d}.png')
-#     frame += 1
+frame = 0
+x_np = x.to_numpy()
+for s in range(steps):
+    scale = 4
+    gui.circles(x_np[s], color=0xFFFFFF, radius=1.5)
+    gui.show(f'{out_dir}/{frame:06d}.png')
+    frame += 1
 
-np.save('x_simple.npy', x.to_numpy())
-# np.save('grid_v_in.npy', grid_v_in.to_numpy())
-# np.save('grid_v_out.npy', grid_v_out.to_numpy())
-# np.save('grid_v_ext.npy', grid_v_ext.to_numpy())
-np.save('strain_test.npy', strain.to_numpy())
-np.save('strain_test2.npy', strain2.to_numpy())
+# np.save('x_simple.npy', x.to_numpy())
+# np.save('strain_test.npy', strain.to_numpy())
+# np.save('strain_test2.npy', strain2.to_numpy())
 # np.save('target_strain_simple.npy', target_strain.to_numpy())
 
 # target_strain = strain
