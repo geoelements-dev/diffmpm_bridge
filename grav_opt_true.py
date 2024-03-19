@@ -10,9 +10,9 @@ ti.init(arch=ti.cuda, default_fp=real, device_memory_GB=12)
 # init parameters
 size = 1
 dim = 2
-N = 60  # reduce to 30 if run out of GPU memory
+N = 80  # reduce to 30 if run out of GPU memory
 n_particles = N * N
-n_grid = 120
+n_grid = 40
 dx = 1 / n_grid
 inv_dx = 1 / dx
 dt_scale = 1e0
@@ -297,23 +297,34 @@ for s in range(steps):
 #     #     target_ti[i, j][k, l] = target_np[i, j, k, l]
 
 # load_target(target_x_np)
-
-
+# node_locs = ti.Vector.field(dim,
+#                             dtype=real,
+#                             shape=(max_steps, n_grid * n_grid))
+# @ti.kernel
+# def assign_node_locs():
+#     for s in range(max_steps):
+#         for i in range(n_grid):
+#             for j in range(n_grid):
+#                 node_locs[s, i * n_grid + j] = [i * dx, j * dx]
+# print('assigning node locs')
+# assign_node_locs()
 # gui = ti.GUI("Taichi Elements", (640, 640), background_color=0x112F41)
 # out_dir = 'out_test'
 
 # frame = 0
 # x_np = x.to_numpy()
+# node_locs_np = node_locs.to_numpy()
 # for s in range(steps):
 #     scale = 4
 #     gui.circles(x_np[s], color=0xFFFFFF, radius=1.5)
+#     gui.circles(node_locs_np[s], color=0xFFA500, radius=1)
 #     gui.show(f'{out_dir}/{frame:06d}.png')
 #     frame += 1
 
-np.save('x_grav.npy', x.to_numpy())
+np.save('x_grav_ngrid40.npy', x.to_numpy())
 # np.save('grid_v_in.npy', grid_v_in.to_numpy())
 # np.save('grid_v_out.npy', grid_v_out.to_numpy())
 # np.save('grid_v_ext.npy', grid_v_ext.to_numpy())
-np.save('strain_grav.npy', strain.to_numpy())
-np.save('strain_grav2.npy', strain2.to_numpy())
+np.save('strain_grav_ngrid40.npy', strain.to_numpy())
+np.save('strain_grav2_ngrid40.npy', strain2.to_numpy())
 # np.save('target_strain_simple.npy', target_strain.to_numpy())

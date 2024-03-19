@@ -10,9 +10,9 @@ ti.init(arch=ti.cuda, default_fp=real, device_memory_GB=12)
 # init parameters
 size = 1
 dim = 2
-N = 60  # reduce to 30 if run out of GPU memory
+N = 80  # reduce to 30 if run out of GPU memory
 n_particles = N * N
-n_grid = 120
+n_grid = 40
 dx = 1 / n_grid
 inv_dx = 1 / dx
 dt_scale = 1e0
@@ -195,12 +195,12 @@ def compute_x_avg():
 def compute_loss():
     for i in range(steps - 1):
         for j in range(n_particles):
-            # dist = (1 / ((steps - 1) * n_particles)) * \
-            #     (target_x[i, j] - x[i, j]) ** 2
-            # loss[None] += 0.5 * (dist[0] + dist[1])
             dist = (1 / ((steps - 1) * n_particles)) * \
-                (target_strain[i, j] - strain2[i, j]) ** 2
-            loss[None] += 0.5 * (dist[0, 0] + dist[1, 1])
+                (target_x[i, j] - x[i, j]) ** 2
+            loss[None] += 0.5 * (dist[0] + dist[1])
+            # dist = (1 / ((steps - 1) * n_particles)) * \
+            #     (target_strain[i, j] - strain2[i, j]) ** 2
+            # loss[None] += 0.5 * (dist[0, 0] + dist[1, 1])
     # dist = (x_avg[None] - ti.Vector(target))**2
     # loss[None] = 0.5 * (dist[0] + dist[1])
 
@@ -281,8 +281,8 @@ for i in range(N):
 print('loading target')
 # target_x = x
 # target_strain = strain
-target_strain_np = np.load('strain_grav2.npy')
-target_x_np = np.load('x_grav.npy')
+target_strain_np = np.load('strain_grav2_ngrid40.npy')
+target_x_np = np.load('x_grav_ngrid40.npy')
 target_x = ti.Vector.field(dim,
                            dtype=real,
                            shape=(max_steps, n_particles),
@@ -295,12 +295,12 @@ target_strain = ti.Matrix.field(dim,
 
 @ti.kernel
 def load_target(target_np: ti.types.ndarray()):
-#     for i, j, k in ti.ndrange(steps, n_particles, dim):
-#         target_x[i, j][k] = target_np[i, j, k]
-    for i, j, k, l in ti.ndrange(steps, n_particles, dim, dim):
-        target_strain[i, j][k, l] = target_np[i, j, k, l]
+    for i, j, k in ti.ndrange(steps, n_particles, dim):
+        target_x[i, j][k] = target_np[i, j, k]
+    # for i, j, k, l in ti.ndrange(steps, n_particles, dim, dim):
+    #     target_strain[i, j][k, l] = target_np[i, j, k, l]
 
-load_target(target_strain_np)
+load_target(target_x_np)
 
 
 # gui = ti.GUI("Taichi Elements", (640, 640), background_color=0x112F41)
@@ -321,60 +321,77 @@ load_target(target_strain_np)
 # np.save('strain.npy', strain.to_numpy())
 # np.save('target_strain_simple.npy', target_strain.to_numpy())
 
+# ADAM parameters
+beta1 = 0.9
+beta2 = 0.999
+epsilon = 1e-8
+m_adam = 0
+v_adam = 0
+# m_adam = ti.Vector.field(1, dtype=float, shape=())
+# v_adam = ti.Vector.field(1, dtype=float, shape=())
+# m_hat = ti.Vector.field(1, dtype=float, shape=())
+# v_hat = ti.Vector.field(1, dtype=float, shape=())
 
 init_g[None] = 9.8
-grad_iterations = 1000
+grad_iterations = 500
 
 losses = []
 gs = np.zeros((grad_iterations))
 # init_v[None] = [0, 0]
 print('running grad iterations')
-for i in range(grad_iterations):
-    grid_v_in.fill(0)
-    grid_m_in.fill(0)
-    loss[None] = 0
-#     x_avg[None] = [0, 0]
-    with ti.ad.Tape(loss=loss):
-        # reset_sim()
-        # set_v()
-        for s in range(steps - 1):
-            substep(s)
-        compute_x_avg()
-        compute_loss()
+# for i in range(grad_iterations):
+#     grid_v_in.fill(0)
+#     grid_m_in.fill(0)
+#     loss[None] = 0
+# #     x_avg[None] = [0, 0]
+#     with ti.ad.Tape(loss=loss):
+#         # reset_sim()
+#         # set_v()
+#         for s in range(steps - 1):
+#             substep(s)
+#         compute_x_avg()
+#         compute_loss()
 
-    l = loss[None]
-    losses.append(l)
-#     v = init_v[None]
-    g = init_g[None]
-    grad = init_g.grad[None]
-#     grad = init_v.grad[None]
-    learning_rate = 1e2
-    init_g[None] -= learning_rate * grad
-#     learning_rate = 1e1
-#     init_v[None][0] -= learning_rate * grad[0]
-#     init_v[None][1] -= learning_rate * grad[1]
-    gs[i] = np.array([g])
-    print('loss=', l, 
-          '   grad=', grad,
-          '   g=', init_g[None])
+#     l = loss[None]
+#     losses.append(l)
+# #     v = init_v[None]
+#     g = init_g[None]
+#     grad = init_g.grad[None]
+# #     grad = init_v.grad[None]
+#     learning_rate = 5e-2
+#     # init_g[None] -= learning_rate * grad
+#     m_adam = beta1 * m_adam + (1 - beta1) * grad
+#     v_adam = beta2 * v_adam + (1 - beta2) * grad**2
+#     m_hat = m_adam / (1 - beta1**(i + 1))
+#     v_hat = v_adam / (1 - beta2**(i + 1))
+#     init_g[None] -= learning_rate * m_hat / (ti.sqrt(v_hat) + epsilon)
+# #     learning_rate = 1e1
+# #     init_v[None][0] -= learning_rate * grad[0]
+# #     init_v[None][1] -= learning_rate * grad[1]
+#     gs[i] = np.array([g])
+#     print(i, 'loss=', l, 
+#           '   grad=', grad,
+#           '   g=', init_g[None])
 #     print('loss=', l, '   grad=', (grad[0], grad[1]), '   v=', init_v[None])
 # print('done')
 # # vs = np.vstack(np.array(vs))
-print(gs)
-plt.title("Optimization of $g$ via $\epsilon (t)$")
-plt.ylabel("Loss")
-plt.xlabel("Gradient Descent Iterations")
-plt.plot(losses)
-plt.yscale('log')
-plt.show()
 
-plt.title("Learning Curve via $\epsilon (t)$")
-plt.ylabel("$g$")
-plt.xlabel("Iterations")
-plt.hlines(10, 0, grad_iterations, color='r', label='True Value')
-plt.plot(gs, color='b', label='Estimated Value')
-plt.legend()
-plt.show()
+# print('Optimized Parameters:', optimized_params)
+# print(gs)
+# plt.title("Optimization of $g$ via $x(t)$")
+# plt.ylabel("Loss")
+# plt.xlabel("Gradient Descent Iterations")
+# plt.plot(losses)
+# plt.yscale('log')
+# plt.show()
+
+# plt.title("Learning Curve via $x(t)$")
+# plt.ylabel("$g$")
+# plt.xlabel("Iterations")
+# plt.hlines(10, 0, grad_iterations, color='r', label='True Value')
+# plt.plot(gs, color='b', label='Estimated Value')
+# plt.legend()
+# plt.show()
 
 # plt.title("$V_{0,y}$ Learning Curve via $x(t)$ (Single Step)")
 # plt.ylabel("$V_{0,y}$")
@@ -383,3 +400,32 @@ plt.show()
 # plt.plot(vs[:,1], color='b', label='Estimated Value')
 # plt.legend()
 # plt.show()
+
+from scipy.optimize import minimize
+def compute_loss_and_grad(params):
+    init_g[None] = params
+
+    grid_v_in.fill(0)
+    grid_m_in.fill(0)
+    loss[None] = 0
+    
+    with ti.ad.Tape(loss=loss):
+        for s in range(steps - 1):
+            substep(s)
+        compute_x_avg()
+        compute_loss()
+
+    loss_val = loss[None]
+    grad_val = init_g.grad[None]
+
+    return loss_val, grad_val
+
+initial_params = 0
+tol = 1e-18
+result = minimize(compute_loss_and_grad, 
+                  initial_params, 
+                  method='L-BFGS-B', 
+                  jac=True, 
+                  options={'disp': 1,'ftol': tol, 'gtol': tol, 'maxiter': 1000})
+
+print(result)
