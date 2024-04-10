@@ -12,25 +12,25 @@ size = 1
 dim = 2
 N = 60  # reduce to 30 if run out of GPU memory
 n_particles = N * N
-n_grid = 40
+n_grid = 20
 dx = 1 / n_grid
 inv_dx = 1 / dx
 dt_scale = 1e0
-dt = 2e-2 * dx / size * dt_scale
-# dt = 3e-4
+# dt = 2e-2 * dx / size * dt_scale
+dt = 3e-4
 p_mass = 1
 p_vol = 1
 E = ti.field(dtype=real, shape=(), needs_grad=True)
 nu = 0.2
 mu = ti.field(dtype=real, shape=(), needs_grad=True)
 la = ti.field(dtype=real, shape=(), needs_grad=True)
-E[None] = 100
+E[None] = 1000
 # E = 100
 # mu = E
 # la = E
 max_steps = 1024
 steps = max_steps
-gravity = 0
+gravity = 1
 target = [0.3, 0.6]
 
 scalar = lambda: ti.field(dtype=real)
@@ -76,8 +76,7 @@ strain = ti.Matrix.field(dim,
                          dtype=real,
                          shape=(max_steps, n_particles),
                          needs_grad=True)
-strain2 = ti.Matrix.field(dim,
-                          dim,
+strain2 = ti.Vector.field(3,
                           dtype=real,
                           shape=(max_steps + 1, n_particles),
                           needs_grad=True)
@@ -117,7 +116,7 @@ def p2g(f: ti.i32):
                 
 
                 
-bound = 1
+bound = 2
 
 @ti.kernel
 def grid_op(f: ti.i32):
@@ -154,37 +153,94 @@ def g2p(f: ti.i32):
                 new_v += weight * g_v
                 new_C += 4 * weight * g_v.outer_product(dpos) * inv_dx
         
-        # shapefn = ti.Vector([0.0, 0.0, 0.0, 0.0])
-        grad = ti.Matrix([[0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]])
-        vi = ti.Matrix([[0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]])
-        dstrain = ti.Matrix([[0.0, 0.0], [0.0, 0.0]])
+        # grad = ti.Matrix([[0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]])
+        # vi = ti.Matrix([[0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]])
+        grad = ti.Matrix([[0.0, 0.0], [0.0, 0.0], [0.0, 0.0], 
+                          [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], 
+                          [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]])
+        vi = ti.Matrix([[0.0, 0.0], [0.0, 0.0], [0.0, 0.0], 
+                        [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], 
+                        [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]])
+        strain_rate = ti.Vector([0.0, 0.0, 0.0])
 
-        grad[0, 0] = -0.25 * (1 - fx[1])
-        grad[1, 0] = 0.25 * (1 - fx[1])
-        grad[2, 0] = 0.25 * (1 + fx[1])
-        grad[3, 0] = -0.25 * (1 + fx[1])
+        #    3----2
+        #    |    |
+        #    0----1
 
-        grad[0, 1] = -0.25 * (1 - fx[0])
-        grad[1, 1] = -0.25 * (1 + fx[0])
-        grad[2, 1] = 0.25 * (1 + fx[0])
-        grad[3, 1] = 0.25 * (1 - fx[0])
+        # # ident base node
+        # base2 = ti.cast(x[f, p] * inv_dx, ti.i32)
+        # # calc local coords
+        # local = (x[f, p] - base2 * dx) / dx
 
-        vi[0, 0] = grid_v_out[f, base[0], base[1]][0]
-        vi[1, 0] = grid_v_out[f, base[0] + 1, base[1]][0]
-        vi[2, 0] = grid_v_out[f, base[0] + 1, base[1] + 1][0]
-        vi[3, 0] = grid_v_out[f, base[0], base[1] + 1][0]
+        # # calc dn_dx
+        # grad[0, 0] = -0.25 * (1 - fx[1])
+        # grad[1, 0] = 0.25 * (1 - fx[1])
+        # grad[2, 0] = 0.25 * (1 + fx[1])
+        # grad[3, 0] = -0.25 * (1 + fx[1])
 
-        vi[0, 1] = grid_v_out[f, base[0], base[1]][1]
-        vi[1, 1] = grid_v_out[f, base[0] + 1, base[1]][1]
-        vi[2, 1] = grid_v_out[f, base[0] + 1, base[1] + 1][1]
-        vi[3, 1] = grid_v_out[f, base[0], base[1] + 1][1]
+        # grad[0, 1] = -0.25 * (1 - fx[0])
+        # grad[1, 1] = -0.25 * (1 + fx[0])
+        # grad[2, 1] = 0.25 * (1 + fx[0])
+        # grad[3, 1] = 0.25 * (1 - fx[0])
+
+        # # get nodal velocities
+        # vi[0, 0] = grid_v_out[f, base2[0], base2[1]][0]
+        # vi[1, 0] = grid_v_out[f, base2[0] + 1, base2[1]][0]
+        # vi[2, 0] = grid_v_out[f, base2[0] + 1, base2[1] + 1][0]
+        # vi[3, 0] = grid_v_out[f, base2[0], base2[1] + 1][0]
+
+        # vi[0, 1] = grid_v_out[f, base2[0], base2[1]][1]
+        # vi[1, 1] = grid_v_out[f, base2[0] + 1, base2[1]][1]
+        # vi[2, 1] = grid_v_out[f, base2[0] + 1, base2[1] + 1][1]
+        # vi[3, 1] = grid_v_out[f, base2[0], base2[1] + 1][1]
+        fx = fx * dx 
+        grad[0, 0] = 0.25 * fx[1] * (fx[1] - 1.) * (2 * fx[0] - 1.)
+        grad[1, 0] = 0.25 * fx[1] * (fx[1] - 1.) * (2 * fx[0] + 1.)
+        grad[2, 0] = 0.25 * fx[1] * (fx[1] + 1.) * (2 * fx[0] + 1.)
+        grad[3, 0] = 0.25 * fx[1] * (fx[1] + 1.) * (2 * fx[0] - 1.)
+        grad[4, 0] = -fx[0] * fx[1] * (fx[1] - 1.)
+        grad[5, 0] = -0.5 * (2. * fx[0] + 1.) * ((fx[1] * fx[1]) - 1.)
+        grad[6, 0] = -fx[0] * fx[1] * (fx[1] + 1.)
+        grad[7, 0] = -0.5 * (2. * fx[0] - 1.) * ((fx[1] * fx[1]) - 1.)
+        grad[8, 0] = 2. * fx[0] * ((fx[1] * fx[1]) - 1.)
+        grad[0, 1] = 0.25 * fx[0] * (fx[0] - 1.) * (2. * fx[1] - 1.)
+        grad[1, 1] = 0.25 * fx[0] * (fx[0] + 1.) * (2. * fx[1] - 1.)
+        grad[2, 1] = 0.25 * fx[0] * (fx[0] + 1.) * (2. * fx[1] + 1.)
+        grad[3, 1] = 0.25 * fx[0] * (fx[0] - 1.) * (2. * fx[1] + 1.)
+        grad[4, 1] = -0.5 * (2. * fx[1] - 1.) * ((fx[0] * fx[0]) - 1.)
+        grad[5, 1] = -fx[0] * fx[1] * (fx[0] + 1.)
+        grad[6, 1] = -0.5 * (2. * fx[1] + 1.) * ((fx[0] * fx[0]) - 1.)
+        grad[7, 1] = -fx[0] * fx[1] * (fx[0] - 1.)
+        grad[8, 1] = 2. * fx[1] * ((fx[0] * fx[0]) - 1.)
         
-        for i in ti.static(range(2)):
-            for j in ti.static(range(2)):
-                for k in ti.static(range(4)):
-                    dstrain[i, j] += 0.5 * (grad[k, i] * vi[k, j] + grad[k, j] * vi[k, i])
-   
-        strain2[f + 1, p] = strain2[f, p] + dstrain
+        vi[0, 0] = grid_v_out[f, base[0], base[1]][0]
+        vi[1, 0] = grid_v_out[f, base[0] + 2, base[1]][0]
+        vi[2, 0] = grid_v_out[f, base[0] + 2, base[1] + 2][0]
+        vi[3, 0] = grid_v_out[f, base[0], base[1] + 2][0]
+        vi[4, 0] = grid_v_out[f, base[0] + 1, base[1]][0]
+        vi[5, 0] = grid_v_out[f, base[0] + 2, base[1] + 1][0]
+        vi[6, 0] = grid_v_out[f, base[0] + 1, base[1] + 2][0]
+        vi[7, 0] = grid_v_out[f, base[0], base[1] + 1][0]
+        vi[8, 0] = grid_v_out[f, base[0] + 1, base[1] + 1][0]
+        vi[0, 1] = grid_v_out[f, base[0], base[1]][1]
+        vi[1, 1] = grid_v_out[f, base[0] + 2, base[1]][1]
+        vi[2, 1] = grid_v_out[f, base[0] + 2, base[1] + 2][1]
+        vi[3, 1] = grid_v_out[f, base[0], base[1] + 2][1]
+        vi[4, 1] = grid_v_out[f, base[0] + 1, base[1]][1]
+        vi[5, 1] = grid_v_out[f, base[0] + 2, base[1] + 1][1]
+        vi[6, 1] = grid_v_out[f, base[0] + 1, base[1] + 2][1]
+        vi[7, 1] = grid_v_out[f, base[0], base[1] + 1][1]
+        vi[8, 1] = grid_v_out[f, base[0] + 1, base[1] + 1][1]
+
+        # calc strain rate
+        for k in ti.static(range(9)):
+            strain_rate[0] += grad[k, 0] * vi[k, 0]
+            strain_rate[1] += grad[k, 1] * vi[k, 1]
+            strain_rate[2] += grad[k, 0] * vi[k, 1] + grad[k, 1] * vi[k, 0]
+
+        # update strain
+        strain2[f + 1, p] = strain2[f, p] + strain_rate * dt
+
 
         v[f + 1, p] = new_v
         x[f + 1, p] = x[f, p] + dt * v[f + 1, p]
@@ -235,14 +291,15 @@ def substep(s):
 
 @ti.kernel
 def assign_ext_load():
+    pass
     # for t in range(max_steps):
     #     for node in node_ids_fext_x:
     #         f_ext[t, node, node] = [0, f_ext_scale * e[t, node]]
-    for t in range(max_steps):
-        for i in range(n_grid):
-            for j in range(n_grid):
-                f_ext[t, 9, j] = [0, -1e2]
-                f_ext[t, 17, j] = [0, 1e2]
+    # for t in range(max_steps):
+    #     for i in range(n_grid):
+    #         for j in range(n_grid):
+    #             f_ext[t, 9, j] = [0, -1e2]
+    #             f_ext[t, 17, j] = [0, 1e2]
 
 
 f_ext_scale = 1   
@@ -268,7 +325,8 @@ for i in range(n_particles):
 
 for i in range(N):
     for j in range(N):
-        x[0, i * N + j] = [(i)/(4*N) + 0.2, (j)/(4*N) + 0.2]
+        # x[0, i * N + j] = [(i)/(4*N) + 0.2, (j)/(4*N) + 0.2]
+        x[0, i * N + j] = [(i)/(N), (j)/(N)]
     
 
 
@@ -307,35 +365,38 @@ for s in range(steps):
 #     #     target_strain[i, j][k, l] = target_np[i, j, k, l]
 
 # load_target(target_x_np)
-node_locs = ti.Vector.field(dim,
-                            dtype=real,
-                            shape=(max_steps, n_grid * n_grid))
-@ti.kernel
-def assign_node_locs():
-    for s in range(max_steps):
-        for i in range(n_grid):
-            for j in range(n_grid):
-                node_locs[s, i * n_grid + j] = [i * dx, j * dx]
+    
 
-print('assigning node locs')
-assign_node_locs()
+# node_locs = ti.Vector.field(dim,
+#                             dtype=real,
+#                             shape=(max_steps, n_grid * n_grid))
+# @ti.kernel
+# def assign_node_locs():
+#     for s in range(max_steps):
+#         for i in range(n_grid):
+#             for j in range(n_grid):
+#                 node_locs[s, i * n_grid + j] = [i * dx, j * dx]
 
-gui = ti.GUI("Taichi Elements", (640, 640), background_color=0x112F41)
-out_dir = 'out_test'
+# print('assigning node locs')
+# assign_node_locs()
 
-frame = 0
-x_np = x.to_numpy()
-node_locs_np = node_locs.to_numpy()
-for s in range(steps):
-    scale = 4
-    gui.circles(x_np[s], color=0xFFFFFF, radius=1.5)
-    gui.circles(node_locs_np[s], color=0xFFA500, radius=1)
-    gui.show(f'{out_dir}/{frame:06d}.png')
-    frame += 1
+# gui = ti.GUI("Taichi Elements", (640, 640), background_color=0x112F41)
+# out_dir = 'out_test'
+
+# frame = 0
+# x_np = x.to_numpy()
+# node_locs_np = node_locs.to_numpy()
+# for s in range(steps):
+#     scale = 4
+#     gui.circles(x_np[s], color=0xFFFFFF, radius=1.5)
+#     gui.circles(node_locs_np[s], color=0xFFA500, radius=1)
+#     gui.show(f'{out_dir}/{frame:06d}.png')
+#     frame += 1
 
 # np.save('x_simple.npy', x.to_numpy())
-# np.save('strain_test.npy', strain.to_numpy())
-# np.save('strain_test2.npy', strain2.to_numpy())
+# np.save('x_np.npy', x.to_numpy())
+np.save('strain_test.npy', strain.to_numpy())
+np.save('strain_test2.npy', strain2.to_numpy())
 # np.save('target_strain_simple.npy', target_strain.to_numpy())
 
 # target_strain = strain
