@@ -367,36 +367,36 @@ for s in range(steps):
 # load_target(target_x_np)
     
 
-# node_locs = ti.Vector.field(dim,
-#                             dtype=real,
-#                             shape=(max_steps, n_grid * n_grid))
-# @ti.kernel
-# def assign_node_locs():
-#     for s in range(max_steps):
-#         for i in range(n_grid):
-#             for j in range(n_grid):
-#                 node_locs[s, i * n_grid + j] = [i * dx, j * dx]
+node_locs = ti.Vector.field(dim,
+                            dtype=real,
+                            shape=(max_steps, n_grid * n_grid))
+@ti.kernel
+def assign_node_locs():
+    for s in range(max_steps):
+        for i in range(n_grid):
+            for j in range(n_grid):
+                node_locs[s, i * n_grid + j] = [i * dx, j * dx]
 
-# print('assigning node locs')
-# assign_node_locs()
+print('assigning node locs')
+assign_node_locs()
 
-# gui = ti.GUI("Taichi Elements", (640, 640), background_color=0x112F41)
-# out_dir = 'out_test'
+gui = ti.GUI("Taichi Elements", (640, 640), background_color=0x112F41)
+out_dir = 'out_test'
 
-# frame = 0
-# x_np = x.to_numpy()
-# node_locs_np = node_locs.to_numpy()
-# for s in range(steps):
-#     scale = 4
-#     gui.circles(x_np[s], color=0xFFFFFF, radius=1.5)
-#     gui.circles(node_locs_np[s], color=0xFFA500, radius=1)
-#     gui.show(f'{out_dir}/{frame:06d}.png')
-#     frame += 1
+frame = 0
+x_np = x.to_numpy()
+node_locs_np = node_locs.to_numpy()
+for s in range(steps):
+    scale = 4
+    gui.circles(x_np[s], color=0xFFFFFF, radius=1.5)
+    gui.circles(node_locs_np[s], color=0xFFA500, radius=1)
+    gui.show(f'{out_dir}/{frame:06d}.png')
+    frame += 1
 
 # np.save('x_simple.npy', x.to_numpy())
 # np.save('x_np.npy', x.to_numpy())
-np.save('strain_test.npy', strain.to_numpy())
-np.save('strain_test2.npy', strain2.to_numpy())
+# np.save('strain_test.npy', strain.to_numpy())
+# np.save('strain_test2.npy', strain2.to_numpy())
 # np.save('target_strain_simple.npy', target_strain.to_numpy())
 
 # target_strain = strain

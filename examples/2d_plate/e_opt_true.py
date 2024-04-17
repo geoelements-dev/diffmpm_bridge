@@ -1,6 +1,5 @@
 import taichi as ti
 import numpy as np
-import engine.utils as utils
 import matplotlib.pyplot as plt
 
 ti.reset()
@@ -20,17 +19,19 @@ dt = 2e-2 * dx / size * dt_scale
 dt = 1e-4
 p_mass = 1
 p_vol = 1
-# E = ti.field(dtype=real, shape=(), needs_grad=True)
-nu = 0.2
+E = ti.field(dtype=real, shape=(), needs_grad=True)
+# nu = 0.2
 # mu = ti.field(dtype=real, shape=(), needs_grad=True)
 # la = ti.field(dtype=real, shape=(), needs_grad=True)
-# E[None] = 100
-# E = 100
-# mu = E
-# la = E
+E[None] = 1e4
+# E = 1e3
+nu = 0.2
+mu = E
+la = E
 max_steps = 1024
 steps = max_steps
-gravity = 0
+gravity = 9.81
+# target = [0.3, 0.6]
 
 
 x = ti.Vector.field(dim,
@@ -76,17 +77,14 @@ strain2 = ti.Matrix.field(dim,
 init_v = ti.Vector.field(dim, dtype=real, shape=(), needs_grad=True)
 loss = ti.field(dtype=real, shape=(), needs_grad=True)
 init_g = ti.field(dtype=real, shape=(), needs_grad=True)
-E = ti.field(dtype=real, shape=(), needs_grad=True)
 
 @ti.kernel
 def set_v():
     for i in range(n_particles):
         v[0, i] = init_v[None]
 
-
 @ti.kernel
 def p2g(f: ti.i32):
-    # mu, la = E[None], E[None]
     for p in range(n_particles):
         base = ti.cast(x[f, p] * inv_dx - 0.5, ti.i32)
         fx = x[f, p] * inv_dx - ti.cast(base, ti.i32)
@@ -95,9 +93,6 @@ def p2g(f: ti.i32):
         F[f + 1, p] = new_F
         J = (new_F).determinant()
         r, s = ti.polar_decompose(new_F)
-        
-        # cauchy = 2 * E[None] * (new_F - r) @ new_F.transpose() + \
-        #          ti.Matrix.diag(2, E[None] * (J - 1) * J)
         cauchy = 2 * E[None] / (2 * (1 + nu)) * (new_F - r) @ new_F.transpose() + \
                  ti.Matrix.diag(2, E[None] * nu / ((1 + nu) * (1 - 2 * nu)) * (J - 1) * J)
         # cauchy = 2 * mu * (new_F - r) @ new_F.transpose() + \
@@ -114,24 +109,37 @@ def p2g(f: ti.i32):
                                                          affine @ dpos)
                 grid_m_in[f, base + offset] += weight * p_mass
 
-bound = 3
 
 @ti.kernel
 def grid_op(f: ti.i32):
     for i, j in ti.ndrange(n_grid, n_grid):     
-        inv_m = 1 / (grid_m_in[f, i, j] + 1e-10) # + dt * grid_v_ext[f, i, j])
+        inv_m = 1 / (grid_m_in[f, i, j] + 1e-10) 
         v_out = inv_m * grid_v_in[f, i, j] 
-        v_out[1] -= dt * init_g[None]
-        if i < bound and v_out[0] < 0:
+        v_out[1] -= dt * gravity
+        if i == 5 and j == 5:
             v_out[0] = 0
-        if i > n_grid - bound and v_out[0] > 0:
-            v_out[0] = 0
-        if j < bound and v_out[1] < 0:
             v_out[1] = 0
-        if j > n_grid - bound and v_out[1] > 0:
+        if i == 14 and j == 5:
             v_out[1] = 0
         grid_v_out[f, i, j] = v_out
 
+# bound = 6
+
+# @ti.kernel
+# def grid_op(f: ti.i32):
+#     for i, j in ti.ndrange(n_grid, n_grid):     
+#         inv_m = 1 / (grid_m_in[f, i, j] + 1e-10) # + dt * grid_v_ext[f, i, j])
+#         v_out = inv_m * grid_v_in[f, i, j] 
+#         v_out[1] -= dt * gravity
+#         if i < bound and v_out[0] < 0:
+#             v_out[0] = 0
+#         if i > n_grid - bound and v_out[0] > 0:
+#             v_out[0] = 0
+#         if j < bound and v_out[1] < 0:
+#             v_out[1] = 0
+#         if j > n_grid - bound and v_out[1] > 0:
+#             v_out[1] = 0
+#         grid_v_out[f, i, j] = v_out
 
 @ti.kernel
 def g2p(f: ti.i32):
@@ -149,6 +157,7 @@ def g2p(f: ti.i32):
                 weight = w[i][0] * w[j][1]
                 new_v += weight * g_v
                 new_C += 4 * weight * g_v.outer_product(dpos) * inv_dx
+
         ### stress and strain from nodal velocity
         # shape function gradient
         grad = ti.Matrix([[0.0, 0.0], [0.0, 0.0], [0.0, 0.0], 
@@ -263,18 +272,13 @@ def compute_x_avg():
 def compute_loss():
     for i in range(steps - 1):
         for j in range(n_particles):
-            # dist = (1 / ((steps - 1) * n_particles)) * \
-            #     (target_x[i, j] - x[i, j]) ** 2
-            # loss[None] += 0.5 * (dist[0] + dist[1])
             dist = (1 / ((steps - 1) * n_particles)) * \
-                (target_strain[i, j] - strain2[i, j]) ** 2
-            loss[None] += 0.5 * (dist[0, 0] + dist[1, 1])
+                (target_x[i, j] - x[i, j]) ** 2
+            loss[None] += 0.5 * (dist[0] + dist[1])
     # dist = (x_avg[None] - ti.Vector(target))**2
     # loss[None] = 0.5 * (dist[0] + dist[1])
 
 def substep(s):
-    # if s == 0:
-    #     print(init_g[None])
     p2g(s)
     grid_op(s)
     g2p(s)
@@ -320,7 +324,7 @@ def reset_sim():
 
 
 init_v[None] = [0., 0.]
-
+init_g[None] = 9.81
 
 for i in range(n_particles):
     F[0, i] = [[1, 0], [0, 1]]
@@ -332,162 +336,52 @@ for i in range(n_particles):
 
 for i in range(N):
     for j in range(N):
-        x[0, i * N + j] = [(i)/(4*N) + 0.125, (j)/(4*N)]
+        x[0, i * N + j] = [(i)/(4*N) + 0.125, (j)/(4*N) + 0.125]
 
 
 
 
 
-# print('running target sim')
+print('running target sim')
 # reset_sim()
 # set_v()
 
 
-# for s in range(steps):
-#     substep(s)
-
-print('loading target')
-# target_x = x
-# target_strain = strain
-target_strain_np = np.load('strain2_e_9node.npy')
-target_x_np = np.load('x_e_realistic.npy')
-target_x = ti.Vector.field(dim,
-                           dtype=real,
-                           shape=(max_steps, n_particles),
-                           needs_grad=True)
-target_strain = ti.Matrix.field(dim,
-                            dim,
-                           dtype=real,
-                           shape=(max_steps, n_particles),
-                           needs_grad=True)
-
-@ti.kernel
-def load_target(target_np: ti.types.ndarray()):
-    # for i, j, k in ti.ndrange(steps, n_particles, dim):
-    #     target_x[i, j][k] = target_np[i, j, k]
-    for i, j, k, l in ti.ndrange(steps, n_particles, dim, dim):
-        target_strain[i, j][k, l] = target_np[i, j, k, l]
-
-load_target(target_strain_np)
+for s in range(steps):
+    # print(s)
+    substep(s)
 
 
+# node_locs = ti.Vector.field(dim,
+#                             dtype=real,
+#                             shape=(max_steps, n_grid * n_grid))
+# @ti.kernel
+# def assign_node_locs():
+#     for s in range(max_steps):
+#         for i in range(n_grid):
+#             for j in range(n_grid):
+#                 node_locs[s, i * n_grid + j] = [i * dx, j * dx]
+# print('assigning node locs')
+# assign_node_locs()
 # gui = ti.GUI("Taichi Elements", (640, 640), background_color=0x112F41)
 # out_dir = 'out_test'
 
 # frame = 0
 # x_np = x.to_numpy()
-# for s in range(steps):
+# node_locs_np = node_locs.to_numpy()
+# for s in range(0, steps, 10):
 #     scale = 4
 #     gui.circles(x_np[s], color=0xFFFFFF, radius=1.5)
+#     gui.circles(node_locs_np[s], color=0xFFA500, radius=1)
 #     gui.show(f'{out_dir}/{frame:06d}.png')
 #     frame += 1
 
-# np.save('x_grav.npy', x.to_numpy())
+
+
+# np.save('x_e_realistic.npy', x.to_numpy())
 # np.save('grid_v_in.npy', grid_v_in.to_numpy())
 # np.save('grid_v_out.npy', grid_v_out.to_numpy())
 # np.save('grid_v_ext.npy', grid_v_ext.to_numpy())
-# np.save('strain.npy', strain.to_numpy())
+# np.save('strain_e_realistic.npy', strain.to_numpy())
+np.save('strain2_e_newboundaries.npy', strain2.to_numpy())
 # np.save('target_strain_simple.npy', target_strain.to_numpy())
-
-
-# ADAM parameters
-beta1 = 0.9
-beta2 = 0.999
-epsilon = 1e-8
-m_adam = 0
-v_adam = 0
-
-init_g[None] = 9.81
-E[None] = 9 * 1e3
-grad_iterations = 400
-
-losses = []
-es = np.zeros((grad_iterations))
-# init_v[None] = [0, 0]
-print('running grad iterations')
-optim = 'grad'
-if optim == 'grad':
-
-    for i in range(grad_iterations):
-        grid_v_in.fill(0)
-        grid_m_in.fill(0)
-        loss[None] = 0
-    #     x_avg[None] = [0, 0]
-        with ti.ad.Tape(loss=loss):
-            # reset_sim()
-            # set_v()
-            for s in range(steps - 1):
-                substep(s)
-            compute_x_avg()
-            compute_loss()
-
-        l = loss[None]
-        losses.append(l)
-    #     v = init_v[None]
-        e = E[None]
-        grad = E.grad[None]
-    #     grad = init_v.grad[None]
-        learning_rate = 1e9
-        m_adam = beta1 * m_adam + (1 - beta1) * grad
-        v_adam = beta2 * v_adam + (1 - beta2) * grad**2
-        m_hat = m_adam / (1 - beta1**(i + 1))
-        v_hat = v_adam / (1 - beta2**(i + 1))
-        E[None] -= learning_rate * m_hat / (ti.sqrt(v_hat) + epsilon)
-        # E[None] -= learning_rate * grad
-    #     learning_rate = 1e1
-    #     init_v[None][0] -= learning_rate * grad[0]
-    #     init_v[None][1] -= learning_rate * grad[1]
-        es[i] = np.array([e])
-        print(i, 
-            'loss=', l, 
-            '   grad=', grad,
-            '   E=', E[None])
-    #     print('loss=', l, '   grad=', (grad[0], grad[1]), '   v=', init_v[None])
-    # print('done')
-    # # vs = np.vstack(np.array(vs))
-    print(es)
-    plt.title("Optimization of $E$ via $\epsilon (t)$")
-    plt.ylabel("Loss")
-    plt.xlabel("Gradient Descent Iterations")
-    plt.plot(losses)
-    plt.yscale('log')
-    plt.show()
-
-    plt.title("Learning Curve via $\epsilon (t)$")
-    plt.ylabel("$E$")
-    plt.xlabel("Iterations")
-    plt.hlines(1e4, 0, grad_iterations, color='r', label='True Value')
-    plt.plot(es, color='b', label='Estimated Value')
-    plt.legend()
-    plt.show()
-
-
-elif optim == 'lbfgs':
-    from scipy.optimize import minimize
-    def compute_loss_and_grad(params):
-        E[None] = params
-
-        grid_v_in.fill(0)
-        grid_m_in.fill(0)
-        loss[None] = 0
-        
-        with ti.ad.Tape(loss=loss):
-            for s in range(steps - 1):
-                substep(s)
-            compute_loss()
-
-        loss_val = loss[None]
-        grad_val = E.grad[None]
-
-        return loss_val, grad_val
-
-
-    initial_params =  1e4
-    tol = 1e-18
-    result = minimize(compute_loss_and_grad, 
-                    initial_params, 
-                    method='L-BFGS-B', 
-                    jac=True, 
-                    options={'disp': 1,'ftol': tol, 'gtol': tol, 'maxiter': 1000})
-
-    print(result)

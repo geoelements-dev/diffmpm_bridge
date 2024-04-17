@@ -146,37 +146,107 @@ def g2p(f: ti.i32):
                 new_v += weight * g_v
                 new_C += 4 * weight * g_v.outer_product(dpos) * inv_dx
 
+        ### stress and strain from nodal velocity
+        # shape function gradient
+        grad = ti.Matrix([[0.0, 0.0], [0.0, 0.0], [0.0, 0.0], 
+                          [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], 
+                          [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]])
+        vi = ti.Matrix([[0.0, 0.0], [0.0, 0.0], [0.0, 0.0], 
+                        [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], 
+                        [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]])
+        strain_rate = ti.Vector([0.0, 0.0, 0.0])
 
-        grad = ti.Matrix([[0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]])
-        vi = ti.Matrix([[0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]])
-        dstrain = ti.Matrix([[0.0, 0.0], [0.0, 0.0]])
 
-        grad[0, 0] = -0.25 * (1 - fx[1])
-        grad[1, 0] = 0.25 * (1 - fx[1])
-        grad[2, 0] = 0.25 * (1 + fx[1])
-        grad[3, 0] = -0.25 * (1 + fx[1])
-
-        grad[0, 1] = -0.25 * (1 - fx[0])
-        grad[1, 1] = -0.25 * (1 + fx[0])
-        grad[2, 1] = 0.25 * (1 + fx[0])
-        grad[3, 1] = 0.25 * (1 - fx[0])
-
-        vi[0, 0] = grid_v_out[f, base[0], base[1]][0]
-        vi[1, 0] = grid_v_out[f, base[0] + 1, base[1]][0]
-        vi[2, 0] = grid_v_out[f, base[0] + 1, base[1] + 1][0]
-        vi[3, 0] = grid_v_out[f, base[0], base[1] + 1][0]
-
-        vi[0, 1] = grid_v_out[f, base[0], base[1]][1]
-        vi[1, 1] = grid_v_out[f, base[0] + 1, base[1]][1]
-        vi[2, 1] = grid_v_out[f, base[0] + 1, base[1] + 1][1]
-        vi[3, 1] = grid_v_out[f, base[0], base[1] + 1][1]
+        fx = fx * dx 
+        grad[0, 0] = 0.25 * fx[1] * (fx[1] - 1.) * (2 * fx[0] - 1.)
+        grad[1, 0] = 0.25 * fx[1] * (fx[1] - 1.) * (2 * fx[0] + 1.)
+        grad[2, 0] = 0.25 * fx[1] * (fx[1] + 1.) * (2 * fx[0] + 1.)
+        grad[3, 0] = 0.25 * fx[1] * (fx[1] + 1.) * (2 * fx[0] - 1.)
+        grad[4, 0] = -fx[0] * fx[1] * (fx[1] - 1.)
+        grad[5, 0] = -0.5 * (2. * fx[0] + 1.) * ((fx[1] * fx[1]) - 1.)
+        grad[6, 0] = -fx[0] * fx[1] * (fx[1] + 1.)
+        grad[7, 0] = -0.5 * (2. * fx[0] - 1.) * ((fx[1] * fx[1]) - 1.)
+        grad[8, 0] = 2. * fx[0] * ((fx[1] * fx[1]) - 1.)
+        grad[0, 1] = 0.25 * fx[0] * (fx[0] - 1.) * (2. * fx[1] - 1.)
+        grad[1, 1] = 0.25 * fx[0] * (fx[0] + 1.) * (2. * fx[1] - 1.)
+        grad[2, 1] = 0.25 * fx[0] * (fx[0] + 1.) * (2. * fx[1] + 1.)
+        grad[3, 1] = 0.25 * fx[0] * (fx[0] - 1.) * (2. * fx[1] + 1.)
+        grad[4, 1] = -0.5 * (2. * fx[1] - 1.) * ((fx[0] * fx[0]) - 1.)
+        grad[5, 1] = -fx[0] * fx[1] * (fx[0] + 1.)
+        grad[6, 1] = -0.5 * (2. * fx[1] + 1.) * ((fx[0] * fx[0]) - 1.)
+        grad[7, 1] = -fx[0] * fx[1] * (fx[0] - 1.)
+        grad[8, 1] = 2. * fx[1] * ((fx[0] * fx[0]) - 1.)
         
-        for i in ti.static(range(2)):
-            for j in ti.static(range(2)):
-                for k in ti.static(range(4)):
-                    dstrain[i, j] += 0.5 * (grad[k, i] * vi[k, j] + grad[k, j] * vi[k, i])
+        vi[0, 0] = grid_v_out[f, base[0], base[1]][0]
+        vi[1, 0] = grid_v_out[f, base[0] + 2, base[1]][0]
+        vi[2, 0] = grid_v_out[f, base[0] + 2, base[1] + 2][0]
+        vi[3, 0] = grid_v_out[f, base[0], base[1] + 2][0]
+        vi[4, 0] = grid_v_out[f, base[0] + 1, base[1]][0]
+        vi[5, 0] = grid_v_out[f, base[0] + 2, base[1] + 1][0]
+        vi[6, 0] = grid_v_out[f, base[0] + 1, base[1] + 2][0]
+        vi[7, 0] = grid_v_out[f, base[0], base[1] + 1][0]
+        vi[8, 0] = grid_v_out[f, base[0] + 1, base[1] + 1][0]
+        vi[0, 1] = grid_v_out[f, base[0], base[1]][1]
+        vi[1, 1] = grid_v_out[f, base[0] + 2, base[1]][1]
+        vi[2, 1] = grid_v_out[f, base[0] + 2, base[1] + 2][1]
+        vi[3, 1] = grid_v_out[f, base[0], base[1] + 2][1]
+        vi[4, 1] = grid_v_out[f, base[0] + 1, base[1]][1]
+        vi[5, 1] = grid_v_out[f, base[0] + 2, base[1] + 1][1]
+        vi[6, 1] = grid_v_out[f, base[0] + 1, base[1] + 2][1]
+        vi[7, 1] = grid_v_out[f, base[0], base[1] + 1][1]
+        vi[8, 1] = grid_v_out[f, base[0] + 1, base[1] + 1][1]
+
+        # calc strain rate
+        for k in ti.static(range(9)):
+            strain_rate[0] += grad[k, 0] * vi[k, 0]
+            strain_rate[1] += grad[k, 1] * vi[k, 1]
+            strain_rate[2] += grad[k, 0] * vi[k, 1] + grad[k, 1] * vi[k, 0]
+
+        # update stress and strain
+        # G = E[None] / (2 * 1 + nu)
+        # bulk_modulus = E[None] / (3 * 1 - 2 * nu)
+        # a1 = bulk_modulus + (4 * G / 3)
+        # a2 = bulk_modulus - (2 * G / 3)
+        # de = ti.Matrix([
+        #             [a1, a2, 0],
+        #             [a2, a1, 0],
+        #             [0, 0, G]
+        #         ])
+        dstrain = strain_rate * dt
+        strain2[f + 1, p][0, 0] = strain2[f, p][0, 0] + dstrain[0]
+        strain2[f + 1, p][1, 1] = strain2[f, p][1, 1] + dstrain[1]
+        strain2[f + 1, p][0, 1] = strain2[f, p][0, 1] + dstrain[2]
+        strain2[f + 1, p][1, 1] = strain2[f, p][1, 0] + dstrain[2]
+        # grad = ti.Matrix([[0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]])
+        # vi = ti.Matrix([[0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]])
+        # dstrain = ti.Matrix([[0.0, 0.0], [0.0, 0.0]])
+
+        # grad[0, 0] = -0.25 * (1 - fx[1])
+        # grad[1, 0] = 0.25 * (1 - fx[1])
+        # grad[2, 0] = 0.25 * (1 + fx[1])
+        # grad[3, 0] = -0.25 * (1 + fx[1])
+
+        # grad[0, 1] = -0.25 * (1 - fx[0])
+        # grad[1, 1] = -0.25 * (1 + fx[0])
+        # grad[2, 1] = 0.25 * (1 + fx[0])
+        # grad[3, 1] = 0.25 * (1 - fx[0])
+
+        # vi[0, 0] = grid_v_out[f, base[0], base[1]][0]
+        # vi[1, 0] = grid_v_out[f, base[0] + 1, base[1]][0]
+        # vi[2, 0] = grid_v_out[f, base[0] + 1, base[1] + 1][0]
+        # vi[3, 0] = grid_v_out[f, base[0], base[1] + 1][0]
+
+        # vi[0, 1] = grid_v_out[f, base[0], base[1]][1]
+        # vi[1, 1] = grid_v_out[f, base[0] + 1, base[1]][1]
+        # vi[2, 1] = grid_v_out[f, base[0] + 1, base[1] + 1][1]
+        # vi[3, 1] = grid_v_out[f, base[0], base[1] + 1][1]
+        
+        # for i in ti.static(range(2)):
+        #     for j in ti.static(range(2)):
+        #         for k in ti.static(range(4)):
+        #             dstrain[i, j] += 0.5 * (grad[k, i] * vi[k, j] + grad[k, j] * vi[k, i])
    
-        strain2[f + 1, p] = strain2[f, p] + dstrain
+        # strain2[f + 1, p] = strain2[f, p] + dstrain
         v[f + 1, p] = new_v
         x[f + 1, p] = x[f, p] + dt * v[f + 1, p]
         C[f + 1, p] = new_C
@@ -315,10 +385,10 @@ for s in range(steps):
 #     gui.show(f'{out_dir}/{frame:06d}.png')
 #     frame += 1
 
-np.save('x_e_realistic.npy', x.to_numpy())
+# np.save('x_e_realistic.npy', x.to_numpy())
 # np.save('grid_v_in.npy', grid_v_in.to_numpy())
 # np.save('grid_v_out.npy', grid_v_out.to_numpy())
 # np.save('grid_v_ext.npy', grid_v_ext.to_numpy())
-np.save('strain_e_realistic.npy', strain.to_numpy())
-np.save('strain2_e_realistic.npy', strain2.to_numpy())
+# np.save('strain_e_realistic.npy', strain.to_numpy())
+np.save('strain2_e_9node.npy', strain2.to_numpy())
 # np.save('target_strain_simple.npy', target_strain.to_numpy())
