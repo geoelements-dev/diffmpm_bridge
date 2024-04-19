@@ -44,6 +44,10 @@ grid_v_out = ti.Vector.field(dim,
                              dtype=real,
                              shape=(max_steps, n_grid, n_grid),
                              needs_grad=True)
+f_ext = ti.Vector.field(dim,
+                        dtype=real,
+                        shape=(max_steps, n_grid, n_grid),
+                        needs_grad=True)
 grid_m_in = ti.field(dtype=real,
                      shape=(max_steps, n_grid, n_grid),
                      needs_grad=True)
@@ -70,6 +74,7 @@ strain2 = ti.Matrix.field(dim,
 init_v = ti.Vector.field(dim, dtype=real, shape=(), needs_grad=True)
 loss = ti.field(dtype=real, shape=(), needs_grad=True)
 init_g = ti.field(dtype=real, shape=(), needs_grad=True)
+force = ti.field(dtype=real, shape=(), needs_grad=True)
 E = ti.field(dtype=real, shape=(), needs_grad=True)
 
 
@@ -101,13 +106,15 @@ def p2g(f: ti.i32):
 def grid_op(f: ti.i32):
     for i, j in ti.ndrange(n_grid, n_grid):     
         inv_m = 1 / (grid_m_in[f, i, j] + 1e-10) 
-        v_out = inv_m * grid_v_in[f, i, j] 
-        v_out[1] -= dt * init_g[None]
+        v_out = inv_m * grid_v_in[f, i, j] + dt * f_ext[f, i, j]
+        # v_out[1] -= dt * init_g[None]
         if i == 5 and j == 5:
             v_out[0] = 0
             v_out[1] = 0
         if i == 14 and j == 5:
             v_out[1] = 0
+        if i == 15 and j == 15:
+            v_out[0] += dt * force[None]
         grid_v_out[f, i, j] = v_out
 
 # bound = 6
@@ -258,8 +265,9 @@ def compute_x_avg():
 def compute_loss():
     for i in range(steps - 1):
         for j in range(n_particles):
-            dist = (1 / ((steps - 1) * n_particles)) * \
-                (target_strain[i, j] - strain2[i, j]) ** 2
+            dist = (target_strain[i, j] - strain2[i, j]) ** 2
+            # dist = (1 / ((steps - 1) * n_particles)) * \
+            #     (target_strain[i, j] - strain2[i, j]) ** 2
             loss[None] += 0.5 * (dist[0, 0] + dist[1, 1])
 
 def substep(s):
@@ -287,6 +295,14 @@ def substep(s):
 #     for node in node_ids_fext_x:
 #         grid_v_ext[t, node, node] = [0, f_ext_scale * e[t, node]]
 
+# @ti.kernel
+# def assign_ext_load():
+#     for t in range(max_steps):
+#             f_ext[t, 15, 15] = [force[None], 0]
+
+
+
+
 
 
 
@@ -305,7 +321,7 @@ for i in range(N):
 
 print('loading target')
 
-target_strain_np = np.load('strain2_e_newboundaries.npy')
+target_strain_np = np.load('strain2_f.npy')
 target_strain = ti.Matrix.field(dim,
                             dim,
                            dtype=real,
@@ -321,60 +337,79 @@ load_target(target_strain_np)
 
 
 # ADAM parameters
+lr = 1e-1
 beta1 = 0.9
 beta2 = 0.999
 epsilon = 1e-8
-m_adam = 0
-v_adam = 0
+n_params = 2
+m_adam = [0 for _ in range(n_params)]
+v_adam = [0 for _ in range(n_params)]
 
-init_g[None] = 9.81
+init_g[None] = 0
+force[None] = -4.5 * 1e3
 E[None] = 0.9 * 1e4
-grad_iterations = 400
+grad_iterations = 10000
 
 losses = []
 es = np.zeros((grad_iterations))
+fs = np.zeros((grad_iterations))
+
 
 print('running grad iterations')
 optim = 'grad'
 if optim == 'grad':
 
-    for i in range(grad_iterations):
+    for j in range(grad_iterations):
         grid_v_in.fill(0)
         grid_m_in.fill(0)
         loss[None] = 0
+
         with ti.ad.Tape(loss=loss):
             for s in range(steps - 1):
                 substep(s)
-            compute_x_avg()
             compute_loss()
 
         l = loss[None]
         losses.append(l)
-        e = E[None]
-        grad = E.grad[None]
-        learning_rate = 1e10
-        m_adam = beta1 * m_adam + (1 - beta1) * grad
-        v_adam = beta2 * v_adam + (1 - beta2) * grad**2
-        m_hat = m_adam / (1 - beta1**(i + 1))
-        v_hat = v_adam / (1 - beta2**(i + 1))
-        E[None] -= learning_rate * m_hat / (ti.sqrt(v_hat) + epsilon)
-    #     init_v[None][0] -= learning_rate * grad[0]
-    #     init_v[None][1] -= learning_rate * grad[1]
-        es[i] = np.array([e])
-        print(i, 
+
+        params = [E, force]
+        param_vals = [E[None], force[None]]
+        for i in range(n_params):
+            gradient = params[i].grad[None]
+            m_adam[i] = m_adam[i] + (1 - beta1) * gradient
+            v_adam[i] = v_adam[i] + (1 - beta1) * gradient ** 2
+            m_hat = m_adam[i] / (1 - beta1**(i + 1))
+            v_hat = v_adam[i] / (1 - beta2**(i + 1))
+            param_vals[i] -= lr * m_hat / (ti.sqrt(v_hat) + epsilon)
+
+        E[None] = param_vals[0]
+        force[None] = param_vals[1]
+
+        es[j] = np.array([E[None]])
+        fs[j] = np.array([force[None]])
+        print(j, 
             'loss=', l, 
-            '   grad=', grad,
-            '   E=', E[None])
+            '   grad=', params[0].grad[None], params[1].grad[None],
+            '   E=', E[None],
+            '   F=', force[None])
 
     print(es)
-    plt.title("Optimization of $E$ via $\epsilon (t)$")
+    plt.title("Optimization of Block Subject to Constant Force via $\epsilon (t)$")
     plt.ylabel("Loss")
     plt.xlabel("Gradient Descent Iterations")
     plt.plot(losses)
     plt.yscale('log')
     plt.show()
 
-    plt.title("Learning Curve via $\epsilon (t)$")
+    plt.title("Force Learning Curve")
+    plt.ylabel("$F$")
+    plt.xlabel("Iterations")
+    plt.hlines(-5e3, 0, grad_iterations, color='r', label='True Value')
+    plt.plot(fs, color='b', label='Estimated Value')
+    plt.legend()
+    plt.show()
+
+    plt.title("Young's Modulus Learning Curve")
     plt.ylabel("$E$")
     plt.xlabel("Iterations")
     plt.hlines(1e4, 0, grad_iterations, color='r', label='True Value')
@@ -386,7 +421,8 @@ if optim == 'grad':
 elif optim == 'lbfgs':
     from scipy.optimize import minimize
     def compute_loss_and_grad(params):
-        E[None] = params
+        E[None] = params[0]
+        force[None] = params[1]
 
         grid_v_in.fill(0)
         grid_m_in.fill(0)
@@ -398,17 +434,33 @@ elif optim == 'lbfgs':
             compute_loss()
 
         loss_val = loss[None]
-        grad_val = E.grad[None]
+        grad_val = [E.grad[None], force.grad[None]]
 
         return loss_val, grad_val
 
 
-    initial_params =  1e4
-    tol = 1e-18
+    initial_params = [0.9e4, -4.5e3]
+    tol = 1e-36
     result = minimize(compute_loss_and_grad, 
                     initial_params, 
                     method='L-BFGS-B', 
                     jac=True, 
-                    options={'disp': 1,'ftol': tol, 'gtol': tol, 'maxiter': 1000})
+                    hess='2-point',
+                    options={
+                        'disp': 1, 
+                        'xatol': tol, 
+                        'fatol': tol, 
+                        'xtol': tol, 
+                        'ftol': tol, 
+                        'gtol': tol,
+                        'tol': tol,
+                        'catol': tol,
+                        'barrier_tol': tol,
+                        'maxCGit': 1000,
+                        'maxfun': 1000, 
+                        'maxiter': 1000,
+                        'verbose': 2,
+                        'adaptive': True
+                        })
 
     print(result)

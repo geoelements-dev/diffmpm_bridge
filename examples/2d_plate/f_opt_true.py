@@ -119,7 +119,7 @@ def grid_op(f: ti.i32):
     for i, j in ti.ndrange(n_grid, n_grid):     
         inv_m = 1 / (grid_m_in[f, i, j] + 1e-10) 
         v_out = inv_m * grid_v_in[f, i, j] + dt * f_ext[f, i, j]
-        v_out[1] -= dt * gravity
+        # v_out[1] -= dt * gravity
         if i == 5 and j == 5:
             v_out[0] = 0
             v_out[1] = 0
@@ -363,29 +363,29 @@ for s in range(steps):
     substep(s)
 
 
-node_locs = ti.Vector.field(dim,
-                            dtype=real,
-                            shape=(max_steps, n_grid * n_grid))
-@ti.kernel
-def assign_node_locs():
-    for s in range(max_steps):
-        for i in range(n_grid):
-            for j in range(n_grid):
-                node_locs[s, i * n_grid + j] = [i * dx, j * dx]
-print('assigning node locs')
-assign_node_locs()
-gui = ti.GUI("Taichi Elements", (640, 640), background_color=0x112F41)
-out_dir = 'out_test'
+# node_locs = ti.Vector.field(dim,
+#                             dtype=real,
+#                             shape=(max_steps, n_grid * n_grid))
+# @ti.kernel
+# def assign_node_locs():
+#     for s in range(max_steps):
+#         for i in range(n_grid):
+#             for j in range(n_grid):
+#                 node_locs[s, i * n_grid + j] = [i * dx, j * dx]
+# print('assigning node locs')
+# assign_node_locs()
+# gui = ti.GUI("Taichi Elements", (640, 640), background_color=0x112F41)
+# out_dir = 'out_test'
 
-frame = 0
-x_np = x.to_numpy()
-node_locs_np = node_locs.to_numpy()
-for s in range(0, steps, 10):
-    scale = 4
-    gui.circles(x_np[s], color=0xFFFFFF, radius=1.5)
-    gui.circles(node_locs_np[s], color=0xFFA500, radius=1)
-    gui.show(f'{out_dir}/{frame:06d}.png')
-    frame += 1
+# frame = 0
+# x_np = x.to_numpy()
+# node_locs_np = node_locs.to_numpy()
+# for s in range(0, steps, 10):
+#     scale = 4
+#     gui.circles(x_np[s], color=0xFFFFFF, radius=1.5)
+#     gui.circles(node_locs_np[s], color=0xFFA500, radius=1)
+#     gui.show(f'{out_dir}/{frame:06d}.png')
+#     frame += 1
 
 
 
@@ -394,5 +394,5 @@ for s in range(0, steps, 10):
 # np.save('grid_v_out.npy', grid_v_out.to_numpy())
 # np.save('grid_v_ext.npy', grid_v_ext.to_numpy())
 # np.save('strain_e_realistic.npy', strain.to_numpy())
-# np.save('strain2_e_newboundaries.npy', strain2.to_numpy())
+np.save('strain2_f.npy', strain2.to_numpy())
 # np.save('target_strain_simple.npy', target_strain.to_numpy())
