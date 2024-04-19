@@ -337,18 +337,19 @@ load_target(target_strain_np)
 
 
 # ADAM parameters
-lr = 1e-1
+lr = 1e1
 beta1 = 0.9
 beta2 = 0.999
 epsilon = 1e-8
 n_params = 2
 m_adam = [0 for _ in range(n_params)]
 v_adam = [0 for _ in range(n_params)]
+v_hat = [0 for _ in range(n_params)]
 
 init_g[None] = 0
 force[None] = -4.5 * 1e3
 E[None] = 0.9 * 1e4
-grad_iterations = 10000
+grad_iterations = 400
 
 losses = []
 es = np.zeros((grad_iterations))
@@ -376,11 +377,12 @@ if optim == 'grad':
         param_vals = [E[None], force[None]]
         for i in range(n_params):
             gradient = params[i].grad[None]
-            m_adam[i] = m_adam[i] + (1 - beta1) * gradient
-            v_adam[i] = v_adam[i] + (1 - beta1) * gradient ** 2
-            m_hat = m_adam[i] / (1 - beta1**(i + 1))
-            v_hat = v_adam[i] / (1 - beta2**(i + 1))
-            param_vals[i] -= lr * m_hat / (ti.sqrt(v_hat) + epsilon)
+            m_adam[i] = beta1 * m_adam[i] + (1 - beta1) * gradient
+            v_adam[i] = beta2 * v_adam[i] + (1 - beta2) * gradient**2
+            # m_hat = m_adam[i] / (1 - beta1**(j + 1))
+            # v_hat = v_adam[i] / (1 - beta2**(j + 1))
+            v_hat[i] = ti.max(v_hat[i], v_adam[i])
+            param_vals[i] -= lr * m_adam[i] / (ti.sqrt(v_hat[i]) + epsilon)
 
         E[None] = param_vals[0]
         force[None] = param_vals[1]
