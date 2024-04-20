@@ -19,19 +19,12 @@ dt = 2e-2 * dx / size * dt_scale
 dt = 1e-4
 p_mass = 1
 p_vol = 1
-E = ti.field(dtype=real, shape=(), needs_grad=True)
-# nu = 0.2
-# mu = ti.field(dtype=real, shape=(), needs_grad=True)
-# la = ti.field(dtype=real, shape=(), needs_grad=True)
-E[None] = 1e4
-# E = 1e3
+
 nu = 0.2
-mu = E
-la = E
+
 max_steps = 1024
 steps = max_steps
 gravity = 0
-# target = [0.3, 0.6]
 
 
 x = ti.Vector.field(dim,
@@ -81,11 +74,9 @@ strain2 = ti.Matrix.field(dim,
 init_v = ti.Vector.field(dim, dtype=real, shape=(), needs_grad=True)
 loss = ti.field(dtype=real, shape=(), needs_grad=True)
 init_g = ti.field(dtype=real, shape=(), needs_grad=True)
+force = ti.field(dtype=real, shape=(), needs_grad=True)
+E = ti.field(dtype=real, shape=(), needs_grad=True)
 
-@ti.kernel
-def set_v():
-    for i in range(n_particles):
-        v[0, i] = init_v[None]
 
 @ti.kernel
 def p2g(f: ti.i32):
@@ -99,8 +90,6 @@ def p2g(f: ti.i32):
         r, s = ti.polar_decompose(new_F)
         cauchy = 2 * E[None] / (2 * (1 + nu)) * (new_F - r) @ new_F.transpose() + \
                  ti.Matrix.diag(2, E[None] * nu / ((1 + nu) * (1 - 2 * nu)) * (J - 1) * J)
-        # cauchy = 2 * mu * (new_F - r) @ new_F.transpose() + \
-        #          ti.Matrix.diag(2, la * (J - 1) * J)
         stress = -(dt * p_vol * 4 * inv_dx * inv_dx) * cauchy
         affine = stress + p_mass * C[f, p]
         strain[f, p] += 0.5 * (new_F.transpose() @ new_F - ti.math.eye(dim))
@@ -113,28 +102,28 @@ def p2g(f: ti.i32):
                                                          affine @ dpos)
                 grid_m_in[f, base + offset] += weight * p_mass
 
-
 @ti.kernel
 def grid_op(f: ti.i32):
     for i, j in ti.ndrange(n_grid, n_grid):     
         inv_m = 1 / (grid_m_in[f, i, j] + 1e-10) 
         v_out = inv_m * grid_v_in[f, i, j] + dt * f_ext[f, i, j]
-        # v_out[1] -= dt * gravity
+        # v_out[1] -= dt * init_g[None]
         if i == 5 and j == 5:
             v_out[0] = 0
             v_out[1] = 0
         if i == 14 and j == 5:
             v_out[1] = 0
+        if i == 15 and j == 15:
+            v_out[0] += dt * force[None]
         grid_v_out[f, i, j] = v_out
 
 # bound = 6
-
 # @ti.kernel
 # def grid_op(f: ti.i32):
 #     for i, j in ti.ndrange(n_grid, n_grid):     
 #         inv_m = 1 / (grid_m_in[f, i, j] + 1e-10) # + dt * grid_v_ext[f, i, j])
 #         v_out = inv_m * grid_v_in[f, i, j] 
-#         v_out[1] -= dt * gravity
+#         v_out[1] -= dt * init_g[None]
 #         if i < bound and v_out[0] < 0:
 #             v_out[0] = 0
 #         if i > n_grid - bound and v_out[0] > 0:
@@ -144,6 +133,7 @@ def grid_op(f: ti.i32):
 #         if j > n_grid - bound and v_out[1] > 0:
 #             v_out[1] = 0
 #         grid_v_out[f, i, j] = v_out
+
 
 @ti.kernel
 def g2p(f: ti.i32):
@@ -161,7 +151,6 @@ def g2p(f: ti.i32):
                 weight = w[i][0] * w[j][1]
                 new_v += weight * g_v
                 new_C += 4 * weight * g_v.outer_product(dpos) * inv_dx
-
         ### stress and strain from nodal velocity
         # shape function gradient
         grad = ti.Matrix([[0.0, 0.0], [0.0, 0.0], [0.0, 0.0], 
@@ -276,35 +265,16 @@ def compute_x_avg():
 def compute_loss():
     for i in range(steps - 1):
         for j in range(n_particles):
-            dist = (1 / ((steps - 1) * n_particles)) * \
-                (target_x[i, j] - x[i, j]) ** 2
-            loss[None] += 0.5 * (dist[0] + dist[1])
-    # dist = (x_avg[None] - ti.Vector(target))**2
-    # loss[None] = 0.5 * (dist[0] + dist[1])
+            dist = (target_strain[i, j] - strain2[i, j]) ** 2
+            # dist = (1 / ((steps - 1) * n_particles)) * \
+            #     (target_strain[i, j] - strain2[i, j]) ** 2
+            loss[None] += 0.5 * (dist[0, 0] + dist[1, 1])
 
 def substep(s):
     p2g(s)
     grid_op(s)
     g2p(s)
 
-# @ti.kernel
-# def set_E():
-#     mu[None] = E[None] / (2 * (1 + nu))
-#     la[None] = E[None] * nu / ((1 + nu) * (1 - 2 * nu))
-    # print(mu, la)
-
-@ti.kernel
-def reset_sim():
-    strain.fill(0)
-    grid_m_in.fill(0)
-    grid_v_in.fill(0)
-
-    # for i in range(n_particles):
-    #     F[0, i] = [[1, 0], [0, 1]]
-
-    for i in range(N):
-        for j in range(N):
-            x[0, i * N + j] = [(i)/(2*N), (j)/(2*N)]
 
 # f_ext_scale = 1   
 # velocity = 4
@@ -325,26 +295,21 @@ def reset_sim():
 #     for node in node_ids_fext_x:
 #         grid_v_ext[t, node, node] = [0, f_ext_scale * e[t, node]]
 
-
-@ti.kernel
-def assign_ext_load():
-    for t in range(max_steps):
-        f_ext[t, 15, 15] = [-5e3, 0]
-
+# @ti.kernel
+# def assign_ext_load():
+#     for t in range(max_steps):
+#             f_ext[t, 15, 15] = [force[None], 0]
 
 
-print('assigning external loads')
-assign_ext_load()
 
-# init_v[None] = [0., 0.]
-# init_g[None] = 9.81
+
+
+
 
 for i in range(n_particles):
     F[0, i] = [[1, 0], [0, 1]]
 
-# for i in range(N):
-#     for j in range(N):
-#         x[0, i * N + j] = [dx * (i * 0.7 + 10), dx * (j * 0.7 + 25)]
+
 
 
 for i in range(N):
@@ -354,45 +319,150 @@ for i in range(N):
 
 
 
+print('loading target')
 
-print('running target sim')
+target_strain_np = np.load('strain2_f.npy')
+target_strain = ti.Matrix.field(dim,
+                            dim,
+                           dtype=real,
+                           shape=(max_steps, n_particles),
+                           needs_grad=True)
 
+@ti.kernel
+def load_target(target_np: ti.types.ndarray()):
+    for i, j, k, l in ti.ndrange(steps, n_particles, dim, dim):
+        target_strain[i, j][k, l] = target_np[i, j, k, l]
 
-for s in range(steps):
-    # print(s)
-    substep(s)
-
-
-# node_locs = ti.Vector.field(dim,
-#                             dtype=real,
-#                             shape=(max_steps, n_grid * n_grid))
-# @ti.kernel
-# def assign_node_locs():
-#     for s in range(max_steps):
-#         for i in range(n_grid):
-#             for j in range(n_grid):
-#                 node_locs[s, i * n_grid + j] = [i * dx, j * dx]
-# print('assigning node locs')
-# assign_node_locs()
-# gui = ti.GUI("Taichi Elements", (640, 640), background_color=0x112F41)
-# out_dir = 'out_test'
-
-# frame = 0
-# x_np = x.to_numpy()
-# node_locs_np = node_locs.to_numpy()
-# for s in range(0, steps, 10):
-#     scale = 4
-#     gui.circles(x_np[s], color=0xFFFFFF, radius=1.5)
-#     gui.circles(node_locs_np[s], color=0xFFA500, radius=1)
-#     gui.show(f'{out_dir}/{frame:06d}.png')
-#     frame += 1
+load_target(target_strain_np)
 
 
+# ADAM parameters
+lr = 1e1
+beta1 = 0.9
+beta2 = 0.999
+epsilon = 1e-8
+n_params = 2
+m_adam = [0 for _ in range(n_params)]
+v_adam = [0 for _ in range(n_params)]
+v_hat = [0 for _ in range(n_params)]
 
-# np.save('x_e_realistic.npy', x.to_numpy())
-# np.save('grid_v_in.npy', grid_v_in.to_numpy())
-# np.save('grid_v_out.npy', grid_v_out.to_numpy())
-# np.save('grid_v_ext.npy', grid_v_ext.to_numpy())
-# np.save('strain_e_realistic.npy', strain.to_numpy())
-np.save('strain2_f.npy', strain2.to_numpy())
-# np.save('target_strain_simple.npy', target_strain.to_numpy())
+init_g[None] = 0
+force[None] = -4.5 * 1e3
+E[None] = 0.9 * 1e4
+grad_iterations = 400
+
+losses = []
+es = np.zeros((grad_iterations))
+fs = np.zeros((grad_iterations))
+
+
+print('running grad iterations')
+optim = 'grad'
+if optim == 'grad':
+
+    for j in range(grad_iterations):
+        grid_v_in.fill(0)
+        grid_m_in.fill(0)
+        loss[None] = 0
+
+        with ti.ad.Tape(loss=loss):
+            for s in range(steps - 1):
+                substep(s)
+            compute_loss()
+
+        l = loss[None]
+        losses.append(l)
+
+        params = [E, force]
+        param_vals = [E[None], force[None]]
+        for i in range(n_params):
+            gradient = params[i].grad[None]
+            m_adam[i] = beta1 * m_adam[i] + (1 - beta1) * gradient
+            v_adam[i] = beta2 * v_adam[i] + (1 - beta2) * gradient**2
+            # m_hat = m_adam[i] / (1 - beta1**(j + 1))
+            # v_hat = v_adam[i] / (1 - beta2**(j + 1))
+            v_hat[i] = ti.max(v_hat[i], v_adam[i])
+            param_vals[i] -= lr * m_adam[i] / (ti.sqrt(v_hat[i]) + epsilon)
+
+        E[None] = param_vals[0]
+        force[None] = param_vals[1]
+
+        es[j] = np.array([E[None]])
+        fs[j] = np.array([force[None]])
+        print(j, 
+            'loss=', l, 
+            '   grad=', params[0].grad[None], params[1].grad[None],
+            '   E=', E[None],
+            '   F=', force[None])
+
+    print(es)
+    plt.title("Optimization of Block Subject to Constant Force via $\epsilon (t)$")
+    plt.ylabel("Loss")
+    plt.xlabel("Gradient Descent Iterations")
+    plt.plot(losses)
+    plt.yscale('log')
+    plt.show()
+
+    plt.title("Force Learning Curve")
+    plt.ylabel("$F$")
+    plt.xlabel("Iterations")
+    plt.hlines(-5e3, 0, grad_iterations, color='r', label='True Value')
+    plt.plot(fs, color='b', label='Estimated Value')
+    plt.legend()
+    plt.show()
+
+    plt.title("Young's Modulus Learning Curve")
+    plt.ylabel("$E$")
+    plt.xlabel("Iterations")
+    plt.hlines(1e4, 0, grad_iterations, color='r', label='True Value')
+    plt.plot(es, color='b', label='Estimated Value')
+    plt.legend()
+    plt.show()
+
+
+elif optim == 'lbfgs':
+    from scipy.optimize import minimize
+    def compute_loss_and_grad(params):
+        E[None] = params[0]
+        force[None] = params[1]
+
+        grid_v_in.fill(0)
+        grid_m_in.fill(0)
+        loss[None] = 0
+        
+        with ti.ad.Tape(loss=loss):
+            for s in range(steps - 1):
+                substep(s)
+            compute_loss()
+
+        loss_val = loss[None]
+        grad_val = [E.grad[None], force.grad[None]]
+
+        return loss_val, grad_val
+
+
+    initial_params = [0.9e4, -4.5e3]
+    tol = 1e-36
+    result = minimize(compute_loss_and_grad, 
+                    initial_params, 
+                    method='L-BFGS-B', 
+                    jac=True, 
+                    hess='2-point',
+                    options={
+                        'disp': 1, 
+                        'xatol': tol, 
+                        'fatol': tol, 
+                        'xtol': tol, 
+                        'ftol': tol, 
+                        'gtol': tol,
+                        'tol': tol,
+                        'catol': tol,
+                        'barrier_tol': tol,
+                        'maxCGit': 1000,
+                        'maxfun': 1000, 
+                        'maxiter': 1000,
+                        'verbose': 2,
+                        'adaptive': True
+                        })
+
+    print(result)
