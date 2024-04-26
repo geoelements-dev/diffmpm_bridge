@@ -12,7 +12,7 @@ dim = 2
 Nx = 80  # reduce to 30 if run out of GPU memory
 Ny = 40
 n_particles = Nx * Ny
-n_grid = 40
+n_grid = 20
 dx = 1 / n_grid
 inv_dx = 1 / dx
 dt = 1e-4
@@ -100,19 +100,17 @@ def p2g(f: ti.i32):
 
 @ti.kernel
 def grid_op(f: ti.i32):
-    for t, node in ti.ndrange(max_steps, (5, 16)):
-            f_ext[t, node, 10] = [0, -force[None] * e[t, node - 5]]
+    for t, node in ti.ndrange(max_steps, (2, 19)):
+            f_ext[t, node, 14] = [0, -force[None] * e[t, node - 2]]
     for i, j in ti.ndrange(n_grid, n_grid):     
         inv_m = 1 / (grid_m_in[f, i, j] + 1e-10) 
         v_out = inv_m * grid_v_in[f, i, j] + dt * f_ext[f, i, j]
-        # v_out[1] -= dt * init_g[None]
-        if i == 5 and j == 5:
+        # v_out[1] -= dt * gravity
+        if i == 2 and j == 6:
             v_out[0] = 0
             v_out[1] = 0
-        if i == 15 and j == 5:
+        if i == 18 and j == 6:
             v_out[1] = 0
-        # if i == 15 and j == 15:
-        #     v_out[0] += dt * force[None]
         grid_v_out[f, i, j] = v_out
 
 
@@ -218,8 +216,9 @@ def substep(s):
 
 
 
-velocity = 10 / 40 / 0.1
-node_x_locs = ti.Vector(np.arange(0, 11 / n_grid, 1 / n_grid))
+f_ext_scale = 5e4   
+velocity = 16 / 20 / 0.1
+node_x_locs = ti.Vector(np.arange(0, 17 / n_grid, 1 / n_grid))
 time_to_center = node_x_locs / velocity
 t_steps = ti.Vector(np.arange(max_steps)) * dt
 t_steps_n = np.array([t_steps - time for time in time_to_center])
@@ -230,13 +229,13 @@ fc, bw, bwr = 100, 0.5, -6
 ref = np.power(10.0, bwr / 20.0)
 a = -(np.pi * fc * bw) ** 2 / (4.0 * np.log(ref))
 e_np = np.exp(-a * t * t)
-e = ti.field(ti.f32, (1024, 11), needs_grad=True)
+e = ti.field(ti.f32, (1024, 17))
 e.from_numpy(e_np)
 
 @ti.kernel
 def assign_ext_load():
-    for t, node in ti.ndrange(max_steps, (5, 16)):
-            f_ext[t, node, 10] = [0, -force[None] * e[t, node - 5]]
+    for t, node in ti.ndrange(max_steps, (2, 19)):
+            f_ext[t, node, 14] = [0, -f_ext_scale * e[t, node - 2]]
 
 
 
@@ -251,7 +250,7 @@ for i in range(n_particles):
 
 for i in range(Nx):
     for j in range(Ny):
-        x[0, j * Nx + i] = [(i)/(4*Nx) + 0.125, (j)/(4*Nx) + 0.125]
+        x[0, j * Nx + i] = [(i)/(Nx) * 0.8 + 0.1, (j)/(Ny) * 0.4 + 0.3]
 
 
 
@@ -274,19 +273,19 @@ load_target(target_strain_np)
 
 
 # ADAM parameters
-lr = 5e1
+lr = 1e1
 beta1 = 0.9
 beta2 = 0.999
 epsilon = 1e-8
-n_params = 2
+n_params = 1
 m_adam = [0 for _ in range(n_params)]
 v_adam = [0 for _ in range(n_params)]
 v_hat = [0 for _ in range(n_params)]
 
 init_g[None] = 0
-force[None] = 4.5 * 1e4
+force[None] = 5 * 1e4
 E[None] = 0.9 * 1e4
-grad_iterations = 1000
+grad_iterations = 100
 
 losses = []
 es = []
@@ -294,7 +293,7 @@ fs = []
 
 
 print('running grad iterations')
-optim = 'lbfgs'
+optim = 'grad'
 if optim == 'grad':
 
     for j in range(grad_iterations):
@@ -328,7 +327,7 @@ if optim == 'grad':
         fs.append(force[None])
         print(j, 
             'loss=', l, 
-            '   grad=', params[0].grad[None], params[1].grad[None],
+            '   grad=', params[0].grad[None], # params[1].grad[None],
             '   E=', E[None],
             '   F=', force[None])
 

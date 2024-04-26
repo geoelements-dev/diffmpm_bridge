@@ -21,7 +21,7 @@ p_vol = 1
 E = ti.field(dtype=real, shape=(), needs_grad=True)
 E[None] = 1e4
 nu = 0.2
-max_steps = 1000
+max_steps = 1024
 steps = max_steps
 gravity = 0
 
@@ -105,10 +105,10 @@ def grid_op(f: ti.i32):
         inv_m = 1 / (grid_m_in[f, i, j] + 1e-10) 
         v_out = inv_m * grid_v_in[f, i, j] + dt * f_ext[f, i, j]
         # v_out[1] -= dt * gravity
-        if i == 2 and j == 2:
+        if i == 2 and j == 6:
             v_out[0] = 0
             v_out[1] = 0
-        if i == 19 and j == 2:
+        if i == 18 and j == 6:
             v_out[1] = 0
         grid_v_out[f, i, j] = v_out
 
@@ -204,10 +204,8 @@ def substep(s):
     g2p(s)
 
 f_ext_scale = 5e4   
-n_start, n_stop = 2, 17
-n_y = 10
-velocity = (n_stop - n_start) / n_grid / (steps * dt) # gaps / ngrid / t
-node_x_locs = ti.Vector(np.arange(0, (n_stop - n_start + 1) / n_grid, 1 / n_grid))
+velocity = 16 / 20 / 0.1
+node_x_locs = ti.Vector(np.arange(0, 17 / n_grid, 1 / n_grid))
 time_to_center = node_x_locs / velocity
 t_steps = ti.Vector(np.arange(max_steps)) * dt
 t_steps_n = np.array([t_steps - time for time in time_to_center])
@@ -218,13 +216,13 @@ fc, bw, bwr = 100, 0.5, -6
 ref = np.power(10.0, bwr / 20.0)
 a = -(np.pi * fc * bw) ** 2 / (4.0 * np.log(ref))
 e_np = np.exp(-a * t * t)
-e = ti.field(ti.f32, (steps, (n_stop - n_start + 1)))
+e = ti.field(ti.f32, (1024, 17))
 e.from_numpy(e_np)
 
 @ti.kernel
 def assign_ext_load():
-    for t, node in ti.ndrange(max_steps, (n_start, n_stop+1)):
-            f_ext[t, node, n_y] = [0, -f_ext_scale * e[t, node - n_start]]
+    for t, node in ti.ndrange(max_steps, (2, 19)):
+            f_ext[t, node, 14] = [0, -f_ext_scale * e[t, node - 2]]
 
 
 
@@ -238,7 +236,7 @@ for i in range(n_particles):
 
 for i in range(Nx):
     for j in range(Ny):
-        x[0, j * Nx + i] = [(i)/(1.2 * Nx) + 0.1, (j)/(1.2 * Nx) + 0.1]
+        x[0, j * Nx + i] = [(i)/(Nx) * 0.8 + 0.1, (j)/(Ny) * 0.4 + 0.3]
 
 
 
@@ -252,30 +250,30 @@ for s in range(steps):
     substep(s)
 
 
-node_locs = ti.Vector.field(dim,
-                            dtype=real,
-                            shape=(max_steps, n_grid * n_grid))
-@ti.kernel
-def assign_node_locs():
-    for s in range(max_steps):
-        for i in range(n_grid):
-            for j in range(n_grid):
-                node_locs[s, i * n_grid + j] = [i * dx, j * dx]
-print('assigning node locs')
-assign_node_locs()
-gui = ti.GUI("Taichi Elements", (640, 640), background_color=0x112F41)
-out_dir = 'out_test'
+# node_locs = ti.Vector.field(dim,
+#                             dtype=real,
+#                             shape=(max_steps, n_grid * n_grid))
+# @ti.kernel
+# def assign_node_locs():
+#     for s in range(max_steps):
+#         for i in range(n_grid):
+#             for j in range(n_grid):
+#                 node_locs[s, i * n_grid + j] = [i * dx, j * dx]
+# print('assigning node locs')
+# assign_node_locs()
+# gui = ti.GUI("Taichi Elements", (640, 640), background_color=0x112F41)
+# out_dir = 'out_test'
 
-frame = 0
-x_np = x.to_numpy()
-node_locs_np = node_locs.to_numpy()
-for s in range(0, steps, 1):
-    scale = 4
-    gui.circles(x_np[s], color=0xFFFFFF, radius=1.5)
-    gui.circles(node_locs_np[s], color=0xFFA500, radius=1)
-    gui.show(f'{out_dir}/{frame:06d}.png')
-    frame += 1
+# frame = 0
+# x_np = x.to_numpy()
+# node_locs_np = node_locs.to_numpy()
+# for s in range(0, steps, 1):
+#     scale = 4
+#     gui.circles(x_np[s], color=0xFFFFFF, radius=1.5)
+#     gui.circles(node_locs_np[s], color=0xFFA500, radius=1)
+#     gui.show(f'{out_dir}/{frame:06d}.png')
+#     frame += 1
 
 
 
-# np.save('strain2_f.npy', strain2.to_numpy())
+np.save('strain2_f.npy', strain2.to_numpy())
