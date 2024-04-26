@@ -352,12 +352,12 @@ E[None] = 0.9 * 1e4
 grad_iterations = 400
 
 losses = []
-es = np.zeros((grad_iterations))
-fs = np.zeros((grad_iterations))
+es = []
+fs = []
 
 
 print('running grad iterations')
-optim = 'grad'
+optim = 'lbfgs'
 if optim == 'grad':
 
     for j in range(grad_iterations):
@@ -440,6 +440,17 @@ elif optim == 'lbfgs':
 
         return loss_val, grad_val
 
+    def callback_fn(intermediate_result):
+        params = intermediate_result.x
+        loss, grad = compute_loss_and_grad(params)
+        losses.append(loss)
+        es.append(params[0])
+        fs.append(params[1])
+        print(j, 
+            'loss=', loss, 
+            '   grad=', grad[0], grad[1],
+            '   E=', params[0],
+            '   F=', params[1])
 
     initial_params = [0.9e4, -4.5e3]
     tol = 1e-36
@@ -448,6 +459,7 @@ elif optim == 'lbfgs':
                     method='L-BFGS-B', 
                     jac=True, 
                     hess='2-point',
+                    callback=callback_fn,
                     options={
                         'disp': 1, 
                         'xatol': tol, 
@@ -466,3 +478,26 @@ elif optim == 'lbfgs':
                         })
 
     print(result)
+
+    plt.title("Optimization of Block Subject to Force via $\epsilon (t)$")
+    plt.ylabel("Loss")
+    plt.xlabel("LBFGS-B Iterations")
+    plt.plot(losses)
+    plt.yscale('log')
+    plt.show()
+
+    plt.title("Force Learning Curve")
+    plt.ylabel("$F$")
+    plt.xlabel("Iterations")
+    plt.hlines(-5e3, 0, result.nit - 1, color='r', label='True Value')
+    plt.plot(fs, color='b', label='Estimated Value')
+    plt.legend()
+    plt.show()
+
+    plt.title("Young's Modulus Learning Curve")
+    plt.ylabel("$E$")
+    plt.xlabel("Iterations")
+    plt.hlines(1e4, 0, result.nit - 1, color='r', label='True Value')
+    plt.plot(es, color='b', label='Estimated Value')
+    plt.legend()
+    plt.show()
