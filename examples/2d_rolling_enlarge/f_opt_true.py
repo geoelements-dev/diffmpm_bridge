@@ -250,30 +250,46 @@ for s in range(steps):
     substep(s)
 
 
-# node_locs = ti.Vector.field(dim,
-#                             dtype=real,
-#                             shape=(max_steps, n_grid * n_grid))
-# @ti.kernel
-# def assign_node_locs():
-#     for s in range(max_steps):
-#         for i in range(n_grid):
-#             for j in range(n_grid):
-#                 node_locs[s, i * n_grid + j] = [i * dx, j * dx]
-# print('assigning node locs')
-# assign_node_locs()
-# gui = ti.GUI("Taichi Elements", (640, 640), background_color=0x112F41)
-# out_dir = 'out_test'
+node_locs = ti.Vector.field(dim,
+                            dtype=real,
+                            shape=(max_steps, n_grid * n_grid))
+load_locs = ti.Vector.field(dim,
+                            dtype=real,
+                            shape=(max_steps))
+pin_locs = ti.Vector.field(dim,
+                            dtype=real,
+                            shape=(max_steps))
+roller_locs = ti.Vector.field(dim,
+                            dtype=real,
+                            shape=(max_steps))
 
-# frame = 0
-# x_np = x.to_numpy()
-# node_locs_np = node_locs.to_numpy()
-# for s in range(0, steps, 1):
-#     scale = 4
-#     gui.circles(x_np[s], color=0xFFFFFF, radius=1.5)
-#     gui.circles(node_locs_np[s], color=0xFFA500, radius=1)
-#     gui.show(f'{out_dir}/{frame:06d}.png')
-#     frame += 1
+@ti.kernel
+def assign_node_locs():
+    for s in range(max_steps):
+        load_locs[s] = [2*dx + velocity * s * dt, 15 * dx]
+        for i in range(n_grid):
+            for j in range(n_grid):
+                node_locs[s, i * n_grid + j] = [i * dx, j * dx]
+print('assigning node locs')
+assign_node_locs()
+gui = ti.GUI("Taichi Elements", (640, 640), background_color=0x112F41)
+out_dir = 'out_test'
+
+frame = 0
+x_np = x.to_numpy()
+node_locs_np = node_locs.to_numpy()
+load_locs_np = load_locs.to_numpy()
+for s in range(0, steps, 1):
+    scale = 4
+    gui.circles(x_np[s], color=0xFFFFFF, radius=1.5)
+    gui.circles(node_locs_np[s], color=0xFFA500, radius=1)
+    # gui.circle(load_locs_np[s], color=0xFF0000, radius=10)
+    gui.arrow(orig=load_locs_np[s], direction = [0, -dx], color=0xFF0000, radius=3)
+    gui.triangle([2 * dx, 6 * dx], [1.5 * dx, 5.5 * dx], [2.5 * dx, 5.5 * dx], color=0x00FF00)
+    gui.circle([18 * dx, 5.5 * dx], color=0x00FF00, radius=15)
+    gui.show(f'{out_dir}/{frame:06d}.png')
+    frame += 1
 
 
 
-np.save('strain2_f.npy', strain2.to_numpy())
+# np.save('strain2_f.npy', strain2.to_numpy())

@@ -285,7 +285,7 @@ v_hat = [0 for _ in range(n_params)]
 init_g[None] = 0
 force[None] = 5 * 1e4
 E[None] = 0.9 * 1e4
-grad_iterations = 100
+grad_iterations = 1000
 
 losses = []
 es = []
