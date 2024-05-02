@@ -1,6 +1,7 @@
 import taichi as ti
 import numpy as np
 import matplotlib.pyplot as plt
+import json 
 
 ti.reset()
 real = ti.f32
@@ -203,11 +204,11 @@ def g2p(f: ti.i32):
 @ti.kernel
 def compute_loss():
     for i in range(steps - 1):
-        for j in range(n_particles):
+        for j in range(Nx):
             dist = (target_strain[i, j] - strain2[i, j]) ** 2
             # dist = (1 / ((steps - 1) * n_particles)) * \
             #     (target_strain[i, j] - strain2[i, j]) ** 2
-            loss[None] += 0.5 * (dist[0, 0] + dist[1, 1])
+            loss[None] += 0.5 * (dist[1, 1])# + dist[0, 0])
 
 def substep(s):
     p2g(s)
@@ -273,7 +274,7 @@ load_target(target_strain_np)
 
 
 # ADAM parameters
-lr = 1e1
+lr = 1e3
 beta1 = 0.9
 beta2 = 0.999
 epsilon = 1e-8
@@ -285,7 +286,7 @@ v_hat = [0 for _ in range(n_params)]
 init_g[None] = 0
 force[None] = 5 * 1e4
 E[None] = 0.9 * 1e4
-grad_iterations = 1000
+grad_iterations = 250
 
 losses = []
 es = []
@@ -357,10 +358,9 @@ if optim == 'grad':
 
 elif optim == 'lbfgs':
     from scipy.optimize import minimize
-
     def compute_loss_and_grad(params):
         E[None] = params[0]
-        force[None] = params[1]
+        # force[None] = params[1]
 
         grid_v_in.fill(0)
         grid_m_in.fill(0)
@@ -372,7 +372,7 @@ elif optim == 'lbfgs':
             compute_loss()
 
         loss_val = loss[None]
-        grad_val = [E.grad[None], force.grad[None]]
+        grad_val = [E.grad[None]]
 
         return loss_val, grad_val
     
@@ -381,14 +381,13 @@ elif optim == 'lbfgs':
         loss, grad = compute_loss_and_grad(params)
         losses.append(loss)
         es.append(params[0])
-        fs.append(params[1])
+        # fs.append(params[1])
         print(j, 
             'loss=', loss, 
-            '   grad=', grad[0], grad[1],
-            '   E=', params[0],
-            '   F=', params[1])
+            '   grad=', grad[0],
+            '   E=', params[0])
 
-    initial_params = [0.98e4, 4.5e4]
+    initial_params = [0.9e4]
     tol = 1e-3600
     result = minimize(compute_loss_and_grad, 
                     initial_params, 
@@ -415,6 +414,8 @@ elif optim == 'lbfgs':
 
     print(result)
 
+    es.insert(0, initial_params[0])
+
     plt.title("Optimization of Block Subject to Dynamic Rolling Force via $\epsilon (t)$")
     plt.ylabel("Loss")
     plt.xlabel("LBFGS-B Iterations")
@@ -437,3 +438,12 @@ elif optim == 'lbfgs':
     plt.plot(es, color='b', label='Estimated Value')
     plt.legend()
     plt.show()
+
+result_dict = {
+    "losses" : losses,
+    "fs" : fs,
+    "es" : es
+}
+
+with open("result_bot_y_grad.json", "w") as outfile: 
+    json.dump(result_dict, outfile)
