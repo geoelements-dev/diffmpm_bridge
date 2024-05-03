@@ -72,7 +72,7 @@ strain2 = ti.Matrix.field(dim,
 loss = ti.field(dtype=real, shape=(), needs_grad=True)
 init_g = ti.field(dtype=real, shape=(), needs_grad=True)
 force = ti.field(dtype=real, shape=(), needs_grad=True)
-E = ti.field(dtype=real, shape=(), needs_grad=True)
+E = ti.field(dtype=real, shape=(n_particles), needs_grad=True)
 
 
 @ti.kernel
@@ -85,7 +85,7 @@ def p2g(f: ti.i32):
         F[f + 1, p] = new_F
         J = (new_F).determinant()
         r, s = ti.polar_decompose(new_F)
-        cauchy = 2 * E[None] / (2 * (1 + nu)) * (new_F - r) @ new_F.transpose() + \
+        cauchy = 2 * E[p] / (2 * (1 + nu)) * (new_F - r) @ new_F.transpose() + \
                  ti.Matrix.diag(2, E[None] * nu / ((1 + nu) * (1 - 2 * nu)) * (J - 1) * J)
         stress = -(dt * p_vol * 4 * inv_dx * inv_dx) * cauchy
         affine = stress + p_mass * C[f, p]
@@ -238,8 +238,17 @@ def assign_ext_load():
     for t, node in ti.ndrange(max_steps, (2, 19)):
             f_ext[t, node, 14] = [0, -f_ext_scale * e[t, node - 2]]
 
-
-
+@ti.kernel
+def assign_E():
+    for i in range(n_particles):
+        col = i % Nx
+        if col % 20 < 20 or col % 20 >= 60:
+            E[i] = 1100
+        else:
+            if i < n_particles * 0.5:
+                E[i] = 800
+            else:
+                E[i] = 900
 
 
 
@@ -278,7 +287,7 @@ lr = 1e3
 beta1 = 0.9
 beta2 = 0.999
 epsilon = 1e-8
-n_params = 1
+n_params = 4
 m_adam = [0 for _ in range(n_params)]
 v_adam = [0 for _ in range(n_params)]
 v_hat = [0 for _ in range(n_params)]
@@ -303,6 +312,7 @@ if optim == 'grad':
         loss[None] = 0
         # assign_ext_load()
         with ti.ad.Tape(loss=loss):
+
             for s in range(steps - 1):
                 substep(s)
             compute_loss()
