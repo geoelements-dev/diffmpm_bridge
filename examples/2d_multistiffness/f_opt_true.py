@@ -229,12 +229,12 @@ def assign_E():
     for i in range(n_particles):
         col = i % Nx
         if col < 20 or col >= 60:
-            E[i] = 1100
+            E[i] = 11000
         else:
             if i < n_particles * 0.5:
-                E[i] = 800
+                E[i] = 8000
             else:
-                E[i] = 900
+                E[i] = 9000
 print('assigning external loads')
 assign_ext_load()
 print('assigning stiffnesses')

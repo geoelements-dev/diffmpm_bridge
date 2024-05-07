@@ -254,7 +254,6 @@ def assign_E():
         if col < 20 or col >= 60:
             E[i] = E1[None]
         else:
-            print('enter')
             if i < n_particles * 0.5:
                 E[i] = E3[None]
             else:
@@ -293,7 +292,7 @@ load_target(target_strain_np)
 
 
 # ADAM parameters
-lr = 1e8
+lr = 1e1
 beta1 = 0.9
 beta2 = 0.999
 epsilon = 1e-8
@@ -314,8 +313,6 @@ E1[None] = 1e4
 E2[None] = 1e4
 E3[None] = 1e4
 
-# E_params.fill(1e4)
-E.fill(1e4)
 grad_iterations = 250
 
 losses = []
@@ -324,7 +321,7 @@ fs = []
 
 
 print('running grad iterations')
-optim = 'grad'
+optim = 'lbfgs'
 if optim == 'grad':
 
     for j in range(grad_iterations):
@@ -390,20 +387,20 @@ if optim == 'grad':
 elif optim == 'lbfgs':
     from scipy.optimize import minimize
     def compute_loss_and_grad(params):
-        E[None] = params[0]
-        # force[None] = params[1]
-
         grid_v_in.fill(0)
         grid_m_in.fill(0)
         loss[None] = 0
-        
+        E1[None] = params[0]
+        E2[None] = params[1]
+        E3[None] = params[2]
         with ti.ad.Tape(loss=loss):
+            assign_E()
             for s in range(steps - 1):
                 substep(s)
             compute_loss()
 
         loss_val = loss[None]
-        grad_val = [E.grad[None]]
+        grad_val = [E1.grad[None], E2.grad[None],E3.grad[None]]
 
         return loss_val, grad_val
     
@@ -415,10 +412,11 @@ elif optim == 'lbfgs':
         # fs.append(params[1])
         print(j, 
             'loss=', loss, 
-            '   grad=', grad[0],
-            '   E=', params[0])
+            '   grad=', grad,
+            '   E=', params)
 
-    initial_params = [0.9e4]
+
+    initial_params = [1e4, 1e4, 1e4]
     tol = 1e-3600
     result = minimize(compute_loss_and_grad, 
                     initial_params, 
