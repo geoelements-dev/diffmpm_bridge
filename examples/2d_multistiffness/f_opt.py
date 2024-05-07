@@ -77,6 +77,15 @@ E = ti.field(dtype=real, shape=(n_particles), needs_grad=True)
 
 @ti.kernel
 def p2g(f: ti.i32):
+    # for i in range(n_particles):
+    #     col = i % Nx
+    #     if col % 20 < 20 or col % 20 >= 60:
+    #         E[i] = E_params[0]
+    #     else:
+    #         if i < n_particles * 0.5:
+    #             E[i] = E_params[2]
+    #         else:
+    #             E[i] = E_params[1]
     for p in range(n_particles):
         base = ti.cast(x[f, p] * inv_dx - 0.5, ti.i32)
         fx = x[f, p] * inv_dx - ti.cast(base, ti.i32)
@@ -86,7 +95,7 @@ def p2g(f: ti.i32):
         J = (new_F).determinant()
         r, s = ti.polar_decompose(new_F)
         cauchy = 2 * E[p] / (2 * (1 + nu)) * (new_F - r) @ new_F.transpose() + \
-                 ti.Matrix.diag(2, E[None] * nu / ((1 + nu) * (1 - 2 * nu)) * (J - 1) * J)
+                 ti.Matrix.diag(2, E[p] * nu / ((1 + nu) * (1 - 2 * nu)) * (J - 1) * J)
         stress = -(dt * p_vol * 4 * inv_dx * inv_dx) * cauchy
         affine = stress + p_mass * C[f, p]
         # strain[f, p] += 0.5 * (new_F.transpose() @ new_F - ti.math.eye(dim))
@@ -204,11 +213,11 @@ def g2p(f: ti.i32):
 @ti.kernel
 def compute_loss():
     for i in range(steps - 1):
-        for j in range(Nx):
+        for j in range(n_particles):
             dist = (target_strain[i, j] - strain2[i, j]) ** 2
             # dist = (1 / ((steps - 1) * n_particles)) * \
             #     (target_strain[i, j] - strain2[i, j]) ** 2
-            loss[None] += 0.5 * (dist[1, 1])# + dist[0, 0])
+            loss[None] += 0.5 * (dist[1, 1] + dist[0, 0])
 
 def substep(s):
     p2g(s)
@@ -242,13 +251,14 @@ def assign_ext_load():
 def assign_E():
     for i in range(n_particles):
         col = i % Nx
-        if col % 20 < 20 or col % 20 >= 60:
-            E[i] = 1100
+        if col < 20 or col >= 60:
+            E[i] = E1[None]
         else:
+            print('enter')
             if i < n_particles * 0.5:
-                E[i] = 800
+                E[i] = E3[None]
             else:
-                E[i] = 900
+                E[i] = E2[None]
 
 
 
@@ -283,18 +293,29 @@ load_target(target_strain_np)
 
 
 # ADAM parameters
-lr = 1e3
+lr = 1e8
 beta1 = 0.9
 beta2 = 0.999
 epsilon = 1e-8
-n_params = 4
+n_params = 3
 m_adam = [0 for _ in range(n_params)]
 v_adam = [0 for _ in range(n_params)]
 v_hat = [0 for _ in range(n_params)]
 
 init_g[None] = 0
 force[None] = 5 * 1e4
-E[None] = 0.9 * 1e4
+
+E_params = ti.field(dtype=real, shape=(3), needs_grad=True)
+E1 = ti.field(dtype=real, shape=(), needs_grad=True)
+E2 = ti.field(dtype=real, shape=(), needs_grad=True)
+E3 = ti.field(dtype=real, shape=(), needs_grad=True)
+
+E1[None] = 1e4
+E2[None] = 1e4
+E3[None] = 1e4
+
+# E_params.fill(1e4)
+E.fill(1e4)
 grad_iterations = 250
 
 losses = []
@@ -310,18 +331,19 @@ if optim == 'grad':
         grid_v_in.fill(0)
         grid_m_in.fill(0)
         loss[None] = 0
-        # assign_ext_load()
         with ti.ad.Tape(loss=loss):
-
+            assign_E()
+            
             for s in range(steps - 1):
                 substep(s)
             compute_loss()
 
+
         l = loss[None]
         losses.append(l)
 
-        params = [E, force]
-        param_vals = [E[None], force[None]]
+        params = [E1, E2, E3]
+        param_vals = [E1[None], E2[None], E3[None]]
         for i in range(n_params):
             gradient = params[i].grad[None]
             m_adam[i] = beta1 * m_adam[i] + (1 - beta1) * gradient
@@ -331,16 +353,15 @@ if optim == 'grad':
             v_hat[i] = ti.max(v_hat[i], v_adam[i])
             param_vals[i] -= lr * m_adam[i] / (ti.sqrt(v_hat[i]) + epsilon)
 
-        E[None] = param_vals[0]
-        force[None] = param_vals[1]
+        # E[None] = param_vals[0]
+        # force[None] = param_vals[1]
 
-        es.append(E[None])
-        fs.append(force[None])
+        # es.append(E[None])
+        # fs.append(force[None])
         print(j, 
             'loss=', l, 
-            '   grad=', params[0].grad[None], # params[1].grad[None],
-            '   E=', E[None],
-            '   F=', force[None])
+            '   grad=', [i.grad[None] for i in params],
+            '   E=', param_vals)
 
     plt.title("Optimization of Block Subject to Dynamic Rolling Force via $\epsilon (t)$")
     plt.ylabel("Loss")
