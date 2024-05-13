@@ -213,11 +213,11 @@ def g2p(f: ti.i32):
 @ti.kernel
 def compute_loss():
     for i in range(steps - 1):
-        for j in range(n_particles):
+        for j in range(39,41):
             dist = (target_strain[i, j] - strain2[i, j]) ** 2
             # dist = (1 / ((steps - 1) * n_particles)) * \
             #     (target_strain[i, j] - strain2[i, j]) ** 2
-            loss[None] += 0.5 * (dist[1, 1] + dist[0, 0])
+            loss[None] += 0.5 * (dist[0, 0])# + dist[0, 0])
 
 def substep(s):
     p2g(s)
@@ -313,17 +313,17 @@ E1[None] = 1e4
 E2[None] = 1e4
 E3[None] = 1e4
 
-grad_iterations = 250
+grad_iterations = 1000
 
 losses = []
-es = []
-fs = []
+param_hist = np.zeros((n_params, grad_iterations))
+param_labels = ['E1', 'E2', 'E3']
+param_true = [1.1e4, 0.9e4, 0.8e4]
 
 
 print('running grad iterations')
 optim = 'lbfgs'
 if optim == 'grad':
-
     for j in range(grad_iterations):
         grid_v_in.fill(0)
         grid_m_in.fill(0)
@@ -350,11 +350,8 @@ if optim == 'grad':
             v_hat[i] = ti.max(v_hat[i], v_adam[i])
             param_vals[i] -= lr * m_adam[i] / (ti.sqrt(v_hat[i]) + epsilon)
 
-        # E[None] = param_vals[0]
-        # force[None] = param_vals[1]
+        param_hist[:, j] = param_vals
 
-        # es.append(E[None])
-        # fs.append(force[None])
         print(j, 
             'loss=', l, 
             '   grad=', [i.grad[None] for i in params],
@@ -367,25 +364,23 @@ if optim == 'grad':
     plt.yscale('log')
     plt.show()
 
-    plt.title("Force Learning Curve")
-    plt.ylabel("$F$")
-    plt.xlabel("Iterations")
-    plt.hlines(5e4, 0, grad_iterations, color='r', label='True Value')
-    plt.plot(fs, color='b', label='Estimated Value')
-    plt.legend()
-    plt.show()
+    for i in range(n_params):
+        plt.title(param_labels[i] + " Learning Curve")
+        plt.ylabel(param_labels[i])
+        plt.xlabel("Iterations")
+        plt.hlines(param_true[i], 0, grad_iterations, color='r', label='True Value')
+        plt.plot(param_hist[i], color='b', label='Estimated Value')
+        plt.legend()
+        plt.show()
 
-    plt.title("Young's Modulus Learning Curve")
-    plt.ylabel("$E$")
-    plt.xlabel("Iterations")
-    plt.hlines(1e4, 0, grad_iterations, color='r', label='True Value')
-    plt.plot(es, color='b', label='Estimated Value')
-    plt.legend()
-    plt.show()
+
 
 
 elif optim == 'lbfgs':
     from scipy.optimize import minimize
+
+    E1_hist, E2_hist, E3_hist = [], [], []
+
     def compute_loss_and_grad(params):
         grid_v_in.fill(0)
         grid_m_in.fill(0)
@@ -408,8 +403,9 @@ elif optim == 'lbfgs':
         params = intermediate_result.x
         loss, grad = compute_loss_and_grad(params)
         losses.append(loss)
-        es.append(params[0])
-        # fs.append(params[1])
+        E1_hist.append(params[0])
+        E2_hist.append(params[1])
+        E3_hist.append(params[2])
         print(j, 
             'loss=', loss, 
             '   grad=', grad,
@@ -443,7 +439,9 @@ elif optim == 'lbfgs':
 
     print(result)
 
-    es.insert(0, initial_params[0])
+    E1_hist.insert(0, initial_params[0])
+    E2_hist.insert(0, initial_params[1])
+    E3_hist.insert(0, initial_params[2])
 
     plt.title("Optimization of Block Subject to Dynamic Rolling Force via $\epsilon (t)$")
     plt.ylabel("Loss")
@@ -452,27 +450,43 @@ elif optim == 'lbfgs':
     plt.yscale('log')
     plt.show()
 
-    plt.title("Force Learning Curve")
-    plt.ylabel("$F$")
+
+    plt.title(param_labels[0] + " Learning Curve")
+    plt.ylabel(param_labels[0])
     plt.xlabel("Iterations")
-    plt.hlines(5e4, 0, result.nit - 1, color='r', label='True Value')
-    plt.plot(fs, color='b', label='Estimated Value')
+    plt.hlines(param_true[0], 0, result.nit-1, color='r', label='True Value')
+    plt.plot(E1_hist, color='b', label='Estimated Value')
     plt.legend()
     plt.show()
 
-    plt.title("Young's Modulus Learning Curve")
-    plt.ylabel("$E$")
+    plt.title(param_labels[1] + " Learning Curve")
+    plt.ylabel(param_labels[1])
     plt.xlabel("Iterations")
-    plt.hlines(1e4, 0, result.nit - 1, color='r', label='True Value')
-    plt.plot(es, color='b', label='Estimated Value')
+    plt.hlines(param_true[1], 0, result.nit-1, color='r', label='True Value')
+    plt.plot(E2_hist, color='b', label='Estimated Value')
     plt.legend()
     plt.show()
 
-result_dict = {
-    "losses" : losses,
-    "fs" : fs,
-    "es" : es
-}
+    plt.title(param_labels[2] + " Learning Curve")
+    plt.ylabel(param_labels[2])
+    plt.xlabel("Iterations")
+    plt.hlines(param_true[2], 0, result.nit-1, color='r', label='True Value')
+    plt.plot(E3_hist, color='b', label='Estimated Value')
+    plt.legend()
+    plt.show()
 
-with open("result_bot_y_grad.json", "w") as outfile: 
+if optim == 'grad':
+    result_dict = {
+        "losses" : losses,
+        "param_hist" : param_hist.tolist()
+    }
+elif optim == 'lbfgs':
+    result_dict = {
+        "losses" : losses,
+        "E1" : E1_hist,
+        "E2" : E2_hist,
+        "E3" : E3_hist
+    }
+
+with open("result_2_x.json", "w") as outfile: 
     json.dump(result_dict, outfile)

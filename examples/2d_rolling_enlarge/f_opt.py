@@ -208,13 +208,12 @@ def compute_loss():
             dist = (target_strain[i, j] - strain2[i, j]) ** 2
             # dist = (1 / ((steps - 1) * n_particles)) * \
             #     (target_strain[i, j] - strain2[i, j]) ** 2
-            loss[None] += 0.5 * (dist[1, 1])# + dist[0, 0])
+            loss[None] += 0.5 * (dist[0, 0] + dist[1, 1])
 
 def substep(s):
     p2g(s)
     grid_op(s)
     g2p(s)
-
 
 
 f_ext_scale = 5e4   
@@ -238,23 +237,12 @@ def assign_ext_load():
     for t, node in ti.ndrange(max_steps, (2, 19)):
             f_ext[t, node, 14] = [0, -f_ext_scale * e[t, node - 2]]
 
-
-
-
-
-
-
 for i in range(n_particles):
     F[0, i] = [[1, 0], [0, 1]]
-
-
 
 for i in range(Nx):
     for j in range(Ny):
         x[0, j * Nx + i] = [(i)/(Nx) * 0.8 + 0.1, (j)/(Ny) * 0.4 + 0.3]
-
-
-
 
 print('loading target')
 
@@ -274,7 +262,7 @@ load_target(target_strain_np)
 
 
 # ADAM parameters
-lr = 1e3
+lr = 1e1
 beta1 = 0.9
 beta2 = 0.999
 epsilon = 1e-8
@@ -445,5 +433,5 @@ result_dict = {
     "es" : es
 }
 
-with open("result_bot_y_grad.json", "w") as outfile: 
+with open("result_bot_grad.json", "w") as outfile: 
     json.dump(result_dict, outfile)
