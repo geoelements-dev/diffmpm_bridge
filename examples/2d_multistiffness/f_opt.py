@@ -213,11 +213,11 @@ def g2p(f: ti.i32):
 @ti.kernel
 def compute_loss():
     for i in range(steps - 1):
-        for j in range(39,41):
+        for j in range(n_particles):
             dist = (target_strain[i, j] - strain2[i, j]) ** 2
             # dist = (1 / ((steps - 1) * n_particles)) * \
             #     (target_strain[i, j] - strain2[i, j]) ** 2
-            loss[None] += 0.5 * (dist[0, 0])# + dist[0, 0])
+            loss[None] += 0.5 * (dist[0, 0] + dist[0, 0])
 
 def substep(s):
     p2g(s)
@@ -292,7 +292,7 @@ load_target(target_strain_np)
 
 
 # ADAM parameters
-lr = 1e1
+lr = 1e2
 beta1 = 0.9
 beta2 = 0.999
 epsilon = 1e-8
@@ -322,7 +322,7 @@ param_true = [1.1e4, 0.9e4, 0.8e4]
 
 
 print('running grad iterations')
-optim = 'lbfgs'
+optim = 'grad'
 if optim == 'grad':
     for j in range(grad_iterations):
         grid_v_in.fill(0)
@@ -488,5 +488,5 @@ elif optim == 'lbfgs':
         "E3" : E3_hist
     }
 
-with open("result_2_x.json", "w") as outfile: 
+with open("result_full_grad.json", "w") as outfile: 
     json.dump(result_dict, outfile)

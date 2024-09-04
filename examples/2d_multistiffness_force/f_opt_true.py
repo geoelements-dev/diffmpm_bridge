@@ -307,5 +307,5 @@ for s in range(0, steps, 1):
     frame += 1
 
 
-
+np.save('x_f.npy', x_np)
 # np.save('strain2_f.npy', strain2.to_numpy())

@@ -213,11 +213,11 @@ def g2p(f: ti.i32):
 @ti.kernel
 def compute_loss():
     for i in range(steps - 1):
-        for j in range(n_particles):
+        for j in range(n_particles/2):
             dist = (target_strain[i, j] - strain2[i, j]) ** 2
             # dist = (1 / ((steps - 1) * n_particles)) * \
             #     (target_strain[i, j] - strain2[i, j]) ** 2
-            loss[None] += 0.5 * (dist[0, 0] + dist[0, 0])
+            loss[None] += 0.5 * (dist[0, 0])# + dist[1, 1])
 
 def substep(s):
     p2g(s)
@@ -313,7 +313,7 @@ E1[None] = 1e4
 E2[None] = 1e4
 E3[None] = 1e4
 
-grad_iterations = 10000
+grad_iterations = 1000
 
 losses = []
 param_hist = np.zeros((n_params, grad_iterations))
@@ -356,30 +356,41 @@ if optim == 'grad':
             'loss=', l, 
             '   grad=', [i.grad[None] for i in params],
             '   params=', param_vals)
-
+    plt.figure(figsize=(11,4))
     plt.title("Optimization of Block Subject to Dynamic Rolling Force via $\epsilon (t)$")
     plt.ylabel("Loss")
     plt.xlabel("Gradient Descent Iterations")
+    plt.ticklabel_format(axis='y', style='sci', scilimits=(0,0))
     plt.plot(losses)
     plt.yscale('log')
+    
+    plt.savefig("grad loss.png")
     plt.show()
+    
 
     for i in range(n_params):
+        plt.figure(figsize=(6,4))
         plt.title(param_labels[i] + " Learning Curve")
         plt.ylabel(param_labels[i])
         plt.xlabel("Iterations")
-        plt.hlines(param_true[i], 0, grad_iterations, color='r', label='True Value')
+        plt.hlines(param_true[i], 0, grad_iterations - 1, color='r', label='True Value')
         plt.plot(param_hist[i], color='b', label='Estimated Value')
         plt.legend()
+        plt.savefig("grad param"+str(i)+".png")
         plt.show()
+        
+    result_dict = {
+        "losses" : losses,
+        "param_hist" : param_hist.tolist()
+    }
 
-
-
+    with open("result_full_grad.json", "w") as outfile: 
+        json.dump(result_dict, outfile)
 
 elif optim == 'lbfgs':
     from scipy.optimize import minimize
 
-    n_ef_it = 5
+    n_ef_it = 20
     E1_hist, E2_hist, E3_hist, F_hist = [], [], [], []
     it_hist = []
 
@@ -476,6 +487,12 @@ elif optim == 'lbfgs':
 
 
     initial_params = [1e4, 1e4, 1e4, 4.5e4]
+
+    E1_hist.append(initial_params[0])
+    E2_hist.append(initial_params[1])
+    E3_hist.append(initial_params[2])
+    F_hist.append(initial_params[3])
+
     tol = 1e-3600
     options = {
         'disp': 1, 
@@ -520,10 +537,7 @@ elif optim == 'lbfgs':
 
         print(result)
 
-    E1_hist.insert(0, initial_params[0])
-    E2_hist.insert(0, initial_params[1])
-    E3_hist.insert(0, initial_params[2])
-    F_hist.insert(0, initial_params[3][0])
+    
 
     print(F_hist)
 
@@ -536,7 +550,7 @@ elif optim == 'lbfgs':
         "it_hist": it_hist
     }
 
-    with open("result_full_e_f.json", "w") as outfile: 
+    with open("result_1600x_block.json", "w") as outfile: 
         json.dump(result_dict, outfile)
 
     plt.title("Optimization of Block Subject to Dynamic Rolling Force via $\epsilon (t)$")
