@@ -217,7 +217,7 @@ def compute_loss():
             dist = (target_strain[i, j] - strain2[i, j]) ** 2
             # dist = (1 / ((steps - 1) * n_particles)) * \
             #     (target_strain[i, j] - strain2[i, j]) ** 2
-            loss[None] += 0.5 * (dist[0, 0] + dist[1, 1])
+            loss[None] += 0.5 * (dist[0, 0] + dist[1, 1]) * 1e16
 
 def substep(s):
     p2g(s)
@@ -226,8 +226,8 @@ def substep(s):
 
 
 
-f_ext_scale = 5e4   
-velocity = 16 / 20 / 0.1
+f_ext_scale = 5
+velocity = 100 #16 / 20 / 0.1
 node_x_locs = ti.Vector(np.arange(0, 17 / n_grid, 1 / n_grid))
 time_to_center = node_x_locs / velocity
 t_steps = ti.Vector(np.arange(max_steps)) * dt
@@ -245,19 +245,20 @@ e.from_numpy(e_np)
 @ti.kernel
 def assign_ext_load():
     for t, node in ti.ndrange(max_steps, (2, 19)):
-            f_ext[t, node, 14] = [0, -force[None]* e[t, node - 2]]
+            f_ext[t, node, 8] = [0, -5* e[t, node - 2]]
 
 @ti.kernel
 def assign_E():
     for i in range(n_particles):
         col = i % Nx
-        if col < 20 or col >= 60:
-            E[i] = 1.1e4
+        if col < 20 :
+            E[i] = E1[None]
+        elif col >= 60:
+            E[i] = E4[None]
+        elif col >= 20 and col < 40:
+            E[i] = E2[None]
         else:
-            if i < n_particles * 0.5:
-                E[i] = 1.1e4
-            else:
-                E[i] = 1.1e4
+            E[i] = E3[None]
 
 
 
@@ -276,7 +277,7 @@ for i in range(Nx):
 
 print('loading target')
 
-target_strain_np = np.load('strain2_f.npy')
+target_strain_np = np.load('strain2_true.npy')
 target_strain = ti.Matrix.field(dim,
                             dim,
                            dtype=real,
@@ -296,29 +297,31 @@ lr = 1e1
 beta1 = 0.9
 beta2 = 0.999
 epsilon = 1e-8
-n_params = 4
+n_params = 5
 m_adam = [0 for _ in range(n_params)]
 v_adam = [0 for _ in range(n_params)]
 v_hat = [0 for _ in range(n_params)]
 
 init_g[None] = 0
-force[None] = 5.5 * 1e4
+force[None] = 5
 
 E_params = ti.field(dtype=real, shape=(3), needs_grad=True)
 E1 = ti.field(dtype=real, shape=(), needs_grad=True)
 E2 = ti.field(dtype=real, shape=(), needs_grad=True)
 E3 = ti.field(dtype=real, shape=(), needs_grad=True)
+E4 = ti.field(dtype=real, shape=(), needs_grad=True)
 
 E1[None] = 1e4
 E2[None] = 1e4
 E3[None] = 1e4
+E4[None] = 1e4
 
 grad_iterations = 1000
 
 losses = []
 param_hist = np.zeros((n_params, grad_iterations))
-param_labels = ['E1', 'E2', 'E3', 'F']
-param_true = [1e4, 0.9e4, 0.8e4, 5e4]
+param_labels = ['E1', 'E2', 'E3', 'E4', 'F']
+param_true = [1.1e4, 0.9e4, 0.9e4, 1.1e4, 5]
 
 
 print('running grad iterations')
@@ -339,8 +342,8 @@ if optim == 'grad':
         l = loss[None]
         losses.append(l)
 
-        params = [E1, E2, E3, force]
-        param_vals = [E1[None], E2[None], E3[None], force[None]]
+        params = [E1, E2, E3, E4, force]
+        param_vals = [E1[None], E2[None], E3[None], E4[None], force[None]]
         for i in range(n_params):
             gradient = params[i].grad[None]
             m_adam[i] = beta1 * m_adam[i] + (1 - beta1) * gradient
@@ -391,7 +394,7 @@ elif optim == 'lbfgs':
     from scipy.optimize import minimize
 
     n_ef_it = 1
-    E1_hist, E2_hist, E3_hist, F_hist = [], [], [], []
+    E1_hist, E2_hist, E3_hist, E4_hist, F_hist = [], [], [], [], []
     it_hist = []
 
     def compute_loss_and_grad(params):
@@ -401,7 +404,8 @@ elif optim == 'lbfgs':
         E1[None] = params[0]
         E2[None] = params[1]
         E3[None] = params[2]
-        force[None] = params[3]
+        E4[None] = params[3]
+        force[None] = params[4]
         with ti.ad.Tape(loss=loss):
             assign_E()
             assign_ext_load()
@@ -410,7 +414,7 @@ elif optim == 'lbfgs':
             compute_loss()
 
         loss_val = loss[None]
-        grad_val = [E1.grad[None], E2.grad[None],E3.grad[None], force.grad[None]]
+        grad_val = [E1.grad[None], E2.grad[None],E3.grad[None],E4.grad[None], force.grad[None]]
 
         return loss_val, grad_val
     
@@ -421,6 +425,7 @@ elif optim == 'lbfgs':
         E1[None] = params[0]
         E2[None] = params[1]
         E3[None] = params[2]
+        E4[None] = params[3]
         with ti.ad.Tape(loss=loss):
             assign_E()
             assign_ext_load()
@@ -429,7 +434,7 @@ elif optim == 'lbfgs':
             compute_loss()
 
         loss_val = loss[None]
-        grad_val = [E1.grad[None], E2.grad[None],E3.grad[None]]
+        grad_val = [E1.grad[None], E2.grad[None], E3.grad[None], E4.grad[None]]
 
         return loss_val, grad_val
     
@@ -457,7 +462,8 @@ elif optim == 'lbfgs':
         E1_hist.append(params[0])
         E2_hist.append(params[1])
         E3_hist.append(params[2])
-        F_hist.append(params[3])
+        E4_hist.append(params[3])
+        F_hist.append(params[4])
         print(j, 
             'loss=', loss, 
             '   grad=', grad,
@@ -470,6 +476,7 @@ elif optim == 'lbfgs':
         E1_hist.append(params[0])
         E2_hist.append(params[1])
         E3_hist.append(params[2])
+        E4_hist.append(params[3])
         print(j, 
             'loss=', loss, 
             '   grad=', grad,
@@ -485,13 +492,14 @@ elif optim == 'lbfgs':
             '   grad=', grad,
             '   params=', params)
 
-
-    initial_params = [1.1e4, 1e4, 1e4, 5.5e4]
+    init_e = 1e2
+    initial_params = [init_e, init_e, init_e, init_e, 5]
 
     E1_hist.append(initial_params[0])
     E2_hist.append(initial_params[1])
     E3_hist.append(initial_params[2])
-    F_hist.append(initial_params[3])
+    E4_hist.append(initial_params[3])
+    F_hist.append(initial_params[4])
 
     tol = 1e-3600
     options = {
@@ -511,16 +519,26 @@ elif optim == 'lbfgs':
         'adaptive': True
         }
 
+    # result = minimize(compute_loss_and_grad,
+    #                   initial_params,
+    #                   method='L-BFGS-B',
+    #                   jac=True,
+    #                   hess='2-point',
+    #                   callback=callback_fn,
+    #                   options=options)
+    # print(result)
+
     for i in range(n_ef_it):
         print("E opt ", i)
         result = minimize(compute_loss_and_grad_e, 
-                        initial_params[:3], 
+                        initial_params[:4], 
                         method='L-BFGS-B', 
                         jac=True, 
                         hess='2-point',
+                        # bounds=[(0, 1e10), (0, 1e10), (0, 1e10), (0, 1e10)],
                         callback=callback_fn_e,
                         options=options)
-        initial_params[:3] = result.x
+        initial_params[:4] = result.x
         it_hist.append(result.nit)
         print(result)
         
@@ -539,18 +557,18 @@ elif optim == 'lbfgs':
 
     
 
-    print(F_hist)
 
     result_dict = {
         "losses" : losses,
         "E1" : E1_hist,
         "E2" : E2_hist,
         "E3" : E3_hist,
+        "E4" : E4_hist,
         "F" : F_hist,
         "it_hist": it_hist
     }
 
-    with open("result_densityadjusted.json", "w") as outfile: 
+    with open("result_1e1.json", "w") as outfile: 
         json.dump(result_dict, outfile)
 
     plt.title("Optimization of Block Subject to Dynamic Rolling Force via $\epsilon (t)$")
@@ -585,13 +603,21 @@ elif optim == 'lbfgs':
     # plt.legend()
     # plt.show()
 
-    plt.title(param_labels[3] + " Learning Curve")
-    plt.ylabel(param_labels[3])
-    plt.xlabel("Iterations")
-    plt.hlines(param_true[3], 0, sum(it_hist), color='r', label='True Value')
-    plt.plot(F_hist, color='b', label='Estimated Value')
-    plt.legend()
-    plt.show()
+    # plt.title(param_labels[3] + " Learning Curve")
+    # plt.ylabel(param_labels[3])
+    # plt.xlabel("Iterations")
+    # plt.hlines(param_true[3], 0, sum(it_hist), color='r', label='True Value')
+    # plt.plot(E4_hist, color='b', label='Estimated Value')
+    # plt.legend()
+    # plt.show()
+
+    # plt.title(param_labels[4] + " Learning Curve")
+    # plt.ylabel(param_labels[4])
+    # plt.xlabel("Iterations")
+    # plt.hlines(param_true[3], 0, sum(it_hist), color='r', label='True Value')
+    # plt.plot(F_hist, color='b', label='Estimated Value')
+    # plt.legend()
+    # plt.show()
 
 # if optim == 'grad':
 #     result_dict = {

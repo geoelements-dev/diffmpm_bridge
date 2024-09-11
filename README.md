@@ -11,12 +11,16 @@ To make a .gif of these files, you can run `python make_gif.py -i "path/to/png/f
 
 
 ## Experiments
+- `2d_plate`: 2D 1:1 plate subject to point force
+- `2d_beam_rolling`: 2D 1:2 beam subject to rolling load, E optimized
+- `2d_rolling_enlarge`: `2d_beam_rolling`, larger scale to fit frame, E optimized
 
 - `2d_beam_f`: 2D deep beam, testing density compensation
 - `2d_beam_p-e_ratio`: 2D deep beam, testing P/E ratios
-- `2d_beam_rolling`: 2D deep beam subject to rolling load, E optimized
 - `2d_cantilever`: 2D deep cantilever beam subject to point load, nonhomogeneous elastic field
-- `2d_multistiffness_force`: 2D deep beam subject to rolling load, nonhomogeneous elastic field, E optimized
-- `2d_multistiffness_force`: 2D deep beam subject to rolling load, nonhomogeneous elastic field, E-F both optimized
-- `2d_plate`: 2D 1:1 plate subject to point force
-- `2d_rolling_enlarge`: 2D deep beam subject to rolling load, larger scale to fit frame, E optimized
+
+- `2d_multistiffness`: `2d_rolling_enlarge`, nonhomogeneous elastic field, E optimized
+- `2d_multistiffness_force`: `2d_multistiffness`, E-F both optimized
+
+- `2d_beam`: 2D 1:8 beam, faster rolling load
+- `2d_beam_noise`: `2d_beam` with noise injected into signal
