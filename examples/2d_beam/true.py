@@ -296,35 +296,37 @@ roller_locs = ti.Vector.field(dim,
 @ti.kernel
 def assign_node_locs():
     for s in range(max_steps):
-        load_locs[s] = [2*dx + velocity * s * dt, 15 * dx]
+        load_locs[s] = [2*dx + velocity * s * dt, 9 * dx]
         for i in range(n_grid):
             for j in range(n_grid):
                 node_locs[s, i * n_grid + j] = [i * dx, j * dx]
 print('assigning node locs')
 assign_node_locs()
-gui = ti.GUI("Taichi Elements", (640, 640), background_color=0x112F41)
+gui = ti.GUI("Taichi Elements", (640, 640), background_color=0xFFFFFF)
 out_dir = 'out_test'
 
 frame = 0
 x_np = x.to_numpy()
-# node_locs_np = node_locs.to_numpy()
-# load_locs_np = load_locs.to_numpy()
-# for s in range(0, steps, 1):
-#     scale = 4
-#     # gui.circles(x_np[s], color=0xFFFFFF, radius=1.5)
-#     x_np_reshape = einops.rearrange(x_np[s], '(w x h y) c -> (h w) x y c', h=4, w=1, x=10, c=2)
-#     gui.circles(x_np_reshape[[0,3]].reshape((-1, dim)), color=0x198C19, radius=1.5)
-#     gui.circles(x_np_reshape[[1,2]].reshape((-1, dim)), color=0xFF4400, radius=1.5)
-#     # gui.circles(x_np_reshape[[2]].reshape((-1, dim)), color=0xFDB100, radius=1.5)
-#     gui.circles(node_locs_np[s], color=0xFFA500, radius=1)
+node_locs_np = node_locs.to_numpy()
+load_locs_np = load_locs.to_numpy()
+for s in range(0, steps, 1):
+    scale = 4
+    # gui.circles(x_np[s], color=0xFFFFFF, radius=1.5)
+    x_np_reshape = einops.rearrange(x_np[s], '(w x h y) c -> (h w) x y c', h=4, w=1, x=10, c=2)
+    gui.circles(x_np_reshape[[0]].reshape((-1, dim)), color=0x0000FF, radius=1.5)
+    gui.circles(x_np_reshape[[1]].reshape((-1, dim)), color=0x008000, radius=1.5)
+    gui.circles(x_np_reshape[[2]].reshape((-1, dim)), color=0xFFFF00, radius=1.5)
+    gui.circles(x_np_reshape[[3]].reshape((-1, dim)), color=0xFF0000, radius=1.5)
+    # gui.circles(x_np_reshape[[2]].reshape((-1, dim)), color=0xFDB100, radius=1.5)
+    gui.circles(node_locs_np[s], color=0xFFA500, radius=1)
     
-#     # gui.circle(load_locs_np[s], color=0xFF0000, radius=10)
-#     gui.arrow(orig=load_locs_np[s], direction = [0, -dx], color=0xFF0000, radius=3)
-#     gui.triangle([2 * dx, 6 * dx], [1.5 * dx, 5.5 * dx], [2.5 * dx, 5.5 * dx], color=0x00FF00)
-#     gui.circle([18 * dx, 5.5 * dx], color=0x00FF00, radius=15)
-#     gui.show(f'{out_dir}/{frame:06d}.png')
-#     frame += 1
+    # gui.circle(load_locs_np[s], color=0xFF0000, radius=10)
+    gui.arrow(orig=load_locs_np[s], direction = [0, -dx], color=0xFF0000, radius=3)
+    gui.triangle([2 * dx, 6 * dx], [1.5 * dx, 5.5 * dx], [2.5 * dx, 5.5 * dx], color=0x00FF00)
+    gui.circle([18 * dx, 5.5 * dx], color=0x00FF00, radius=15)
+    gui.show(f'{out_dir}/{frame:06d}.png')
+    frame += 1
 
 
-np.save('x_true.npy', x_np)
-np.save('strain2_true.npy', strain2.to_numpy())
+# np.save('x_true.npy', x_np)
+# np.save('strain2_true.npy', strain2.to_numpy())
