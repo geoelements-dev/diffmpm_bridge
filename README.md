@@ -24,3 +24,6 @@ To make a .gif of these files, you can run `python make_gif.py -i "path/to/png/f
 
 - `2d_beam`: 2D 1:8 beam, faster rolling load
 - `2d_beam_noise`: `2d_beam` with noise injected into signal
+- `2d_beam_noise_avg` : Uniform noise level applied to all particles, determined by avg signal power
+
+- `2d_beam_discretization` : `2d_beam_noise_avg` with modular discretization
