@@ -286,14 +286,14 @@ target_strain = ti.Matrix.field(dim,
 
 
 # inject noise to eps_xx direction
-SNR_dB = -3
+SNR_dB = 10
 SNR_linear = 10 ** (SNR_dB / 10)
-# get signal power in eps_xx
-P_signal = np.mean(target_strain_np[:,:,0,0]**2, axis=0)
+# get avg signal power in eps_xx
+P_signal = np.mean(target_strain_np[:,:Nx,0,0]**2)
 P_noise = P_signal / SNR_linear
 # particle-wise noise
-noise = np.random.normal(0, P_noise ** 0.5, target_strain_np.shape[:2])
-target_strain_np[:, :, 0, 0] += noise
+noise = np.random.normal(0, P_noise ** 0.5, (steps, Nx))
+target_strain_np[:, :Nx, 0, 0] += noise
 
 @ti.kernel
 def load_target(target_np: ti.types.ndarray()):
@@ -503,7 +503,7 @@ elif optim == 'lbfgs':
             '   grad=', grad,
             '   params=', params)
 
-    init_e = 1.5e4
+    init_e = 1e3
     initial_params = [init_e, init_e, init_e, init_e, 5]
 
     E1_hist.append(initial_params[0])
@@ -579,7 +579,7 @@ elif optim == 'lbfgs':
         "it_hist": it_hist
     }
 
-    with open("result_db_-30_init_15e4.json", "w") as outfile: 
+    with open("result_db_10_init_1e3.json", "w") as outfile: 
         json.dump(result_dict, outfile)
 
     plt.title("Optimization of Block Subject to Dynamic Rolling Force via $\epsilon (t)$")
