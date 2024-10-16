@@ -213,7 +213,7 @@ def g2p(f: ti.i32):
 @ti.kernel
 def compute_loss():
     for i in range(steps - 1):
-        for j in range(Nx):
+        for j in range(n_particles):
             dist = (target_strain[i, j] - strain2[i, j]) ** 2
             # dist = (1 / ((steps - 1) * n_particles)) * \
             #     (target_strain[i, j] - strain2[i, j]) ** 2
@@ -247,18 +247,20 @@ def assign_ext_load():
     for t, node in ti.ndrange(max_steps, (2, 19)):
             f_ext[t, node, 8] = [0, -5* e[t, node - 2]]
 
+n_blocks_y = 1
+n_blocks_x = 2
+n_blocks = n_blocks_y * n_blocks_x
+block_nx = int(Nx / n_blocks_x)
+block_ny = int(Ny / n_blocks_y)
+
+
 @ti.kernel
 def assign_E():
-    for i in range(n_particles):
-        col = i % Nx
-        if col < 20 :
-            E[i] = E1[None]
-        elif col >= 60:
-            E[i] = E4[None]
-        elif col >= 20 and col < 40:
-            E[i] = E2[None]
-        else:
-            E[i] = E3[None]
+    for i in range(Nx):
+        for j in range(Ny):
+            block_index_x = i // block_nx
+            block_index_y = j // block_ny
+            E[j*Nx+i] = E_block[block_index_x + block_index_y * n_blocks_x]
 
 
 
@@ -286,14 +288,14 @@ target_strain = ti.Matrix.field(dim,
 
 
 # inject noise to eps_xx direction
-SNR_dB = 10
+SNR_dB = 1000
 SNR_linear = 10 ** (SNR_dB / 10)
 # get avg signal power in eps_xx
 P_signal = np.mean(target_strain_np[:,:Nx,0,0]**2)
 P_noise = P_signal / SNR_linear
 # particle-wise noise
 noise = np.random.normal(0, P_noise ** 0.5, (steps, Nx))
-target_strain_np[:, :Nx, 0, 0] += noise
+# target_strain_np[:, :Nx, 0, 0] += noise
 
 @ti.kernel
 def load_target(target_np: ti.types.ndarray()):
@@ -308,31 +310,25 @@ lr = 1e1
 beta1 = 0.9
 beta2 = 0.999
 epsilon = 1e-8
-n_params = 5
+n_params = n_blocks
 m_adam = [0 for _ in range(n_params)]
 v_adam = [0 for _ in range(n_params)]
 v_hat = [0 for _ in range(n_params)]
 
 init_g[None] = 0
-force[None] = 5
+# force[None] = 5
 
-E_params = ti.field(dtype=real, shape=(3), needs_grad=True)
-E1 = ti.field(dtype=real, shape=(), needs_grad=True)
-E2 = ti.field(dtype=real, shape=(), needs_grad=True)
-E3 = ti.field(dtype=real, shape=(), needs_grad=True)
-E4 = ti.field(dtype=real, shape=(), needs_grad=True)
+E_block = ti.field(dtype=real, shape=(n_blocks), needs_grad=True)
 
-E1[None] = 1e4
-E2[None] = 1e4
-E3[None] = 1e4
-E4[None] = 1e4
+
+E_block.fill(1e4)
 
 grad_iterations = 1000
 
 losses = []
 param_hist = np.zeros((n_params, grad_iterations))
-param_labels = ['E1', 'E2', 'E3', 'E4', 'F']
-param_true = [1.1e4, 0.9e4, 0.9e4, 1.1e4, 5]
+param_labels = ['E1', 'E2', 'E3', 'E4']
+param_true = [1.1e4, 0.9e4, 0.9e4, 1.1e4]
 
 
 print('running grad iterations')
@@ -353,23 +349,24 @@ if optim == 'grad':
         l = loss[None]
         losses.append(l)
 
-        params = [E1, E2, E3, E4, force]
-        param_vals = [E1[None], E2[None], E3[None], E4[None], force[None]]
         for i in range(n_params):
-            gradient = params[i].grad[None]
+            gradient = E_block.grad[i]
             m_adam[i] = beta1 * m_adam[i] + (1 - beta1) * gradient
             v_adam[i] = beta2 * v_adam[i] + (1 - beta2) * gradient**2
             # m_hat = m_adam[i] / (1 - beta1**(j + 1))
             # v_hat = v_adam[i] / (1 - beta2**(j + 1))
             v_hat[i] = ti.max(v_hat[i], v_adam[i])
-            param_vals[i] -= lr * m_adam[i] / (ti.sqrt(v_hat[i]) + epsilon)
+            E_block[i] -= lr * m_adam[i] / (ti.sqrt(v_hat[i]) + epsilon)
 
-        param_hist[:, j] = param_vals
+        param_hist[:, j] = E_block.to_numpy()
 
+        grad_print = []
+        for i in range(n_blocks):
+            grad_print.append(E_block.grad[i])
         print(j, 
             'loss=', l, 
-            '   grad=', [i.grad[None] for i in params],
-            '   params=', param_vals)
+            '   grad=', grad_print,
+            '   params=', E_block)
     plt.figure(figsize=(11,4))
     plt.title("Optimization of Block Subject to Dynamic Rolling Force via $\epsilon (t)$")
     plt.ylabel("Loss")
@@ -405,18 +402,15 @@ elif optim == 'lbfgs':
     from scipy.optimize import minimize
 
     n_ef_it = 1
-    E1_hist, E2_hist, E3_hist, E4_hist, F_hist = [], [], [], [], []
+    E_hist = []
     it_hist = []
 
     def compute_loss_and_grad(params):
         grid_v_in.fill(0)
         grid_m_in.fill(0)
         loss[None] = 0
-        E1[None] = params[0]
-        E2[None] = params[1]
-        E3[None] = params[2]
-        E4[None] = params[3]
-        force[None] = params[4]
+        for i in range(n_blocks):
+            E_block[i] = params[i]
         with ti.ad.Tape(loss=loss):
             assign_E()
             assign_ext_load()
@@ -425,161 +419,150 @@ elif optim == 'lbfgs':
             compute_loss()
 
         loss_val = loss[None]
-        grad_val = [E1.grad[None], E2.grad[None],E3.grad[None],E4.grad[None], force.grad[None]]
+        grad_val = [E_block.grad[i] for i in range(n_blocks)]
+
 
         return loss_val, grad_val
     
-    def compute_loss_and_grad_e(params):
-        grid_v_in.fill(0)
-        grid_m_in.fill(0)
-        loss[None] = 0
-        E1[None] = params[0]
-        E2[None] = params[1]
-        E3[None] = params[2]
-        E4[None] = params[3]
-        with ti.ad.Tape(loss=loss):
-            assign_E()
-            assign_ext_load()
-            for s in range(steps - 1):
-                substep(s)
-            compute_loss()
+    # def compute_loss_and_grad_e(params):
+    #     grid_v_in.fill(0)
+    #     grid_m_in.fill(0)
+    #     loss[None] = 0
+    #     E1[None] = params[0]
+    #     E2[None] = params[1]
+    #     E3[None] = params[2]
+    #     E4[None] = params[3]
+    #     with ti.ad.Tape(loss=loss):
+    #         assign_E()
+    #         assign_ext_load()
+    #         for s in range(steps - 1):
+    #             substep(s)
+    #         compute_loss()
 
-        loss_val = loss[None]
-        grad_val = [E1.grad[None], E2.grad[None], E3.grad[None], E4.grad[None]]
+    #     loss_val = loss[None]
+    #     grad_val = [E1.grad[None], E2.grad[None], E3.grad[None], E4.grad[None]]
 
-        return loss_val, grad_val
+    #     return loss_val, grad_val
     
-    def compute_loss_and_grad_f(params):
-        grid_v_in.fill(0)
-        grid_m_in.fill(0)
-        loss[None] = 0
-        force[None] = params[0]
-        with ti.ad.Tape(loss=loss):
-            assign_E()
-            assign_ext_load()
-            for s in range(steps - 1):
-                substep(s)
-            compute_loss()
+    # def compute_loss_and_grad_f(params):
+    #     grid_v_in.fill(0)
+    #     grid_m_in.fill(0)
+    #     loss[None] = 0
+    #     force[None] = params[0]
+    #     with ti.ad.Tape(loss=loss):
+    #         assign_E()
+    #         assign_ext_load()
+    #         for s in range(steps - 1):
+    #             substep(s)
+    #         compute_loss()
 
-        loss_val = loss[None]
-        grad_val = [force.grad[None]]
+    #     loss_val = loss[None]
+    #     grad_val = [force.grad[None]]
 
-        return loss_val, grad_val
+    #     return loss_val, grad_val
     
     def callback_fn(intermediate_result):
-        params = intermediate_result.x
+        params = intermediate_result
         loss, grad = compute_loss_and_grad(params)
         losses.append(loss)
-        E1_hist.append(params[0])
-        E2_hist.append(params[1])
-        E3_hist.append(params[2])
-        E4_hist.append(params[3])
-        F_hist.append(params[4])
+        E_hist.append(params.tolist())
         print(j, 
             'loss=', loss, 
             '   grad=', grad,
             '   params=', params)
         
-    def callback_fn_e(intermediate_result):
-        params = intermediate_result.x
-        loss, grad = compute_loss_and_grad_e(params)
-        losses.append(loss)
-        E1_hist.append(params[0])
-        E2_hist.append(params[1])
-        E3_hist.append(params[2])
-        E4_hist.append(params[3])
-        print(j, 
-            'loss=', loss, 
-            '   grad=', grad,
-            '   params=', params)
+    # def callback_fn_e(intermediate_result):
+    #     params = intermediate_result.x
+    #     loss, grad = compute_loss_and_grad_e(params)
+    #     losses.append(loss)
+    #     E1_hist.append(params[0])
+    #     E2_hist.append(params[1])
+    #     E3_hist.append(params[2])
+    #     E4_hist.append(params[3])
+    #     print(j, 
+    #         'loss=', loss, 
+    #         '   grad=', grad,
+    #         '   params=', params)
         
-    def callback_fn_f(intermediate_result):
-        params = intermediate_result.x
-        loss, grad = compute_loss_and_grad_f(params)
-        losses.append(loss)
-        F_hist.append(params[0])
-        print(j, 
-            'loss=', loss, 
-            '   grad=', grad,
-            '   params=', params)
+    # def callback_fn_f(intermediate_result):
+    #     params = intermediate_result.x
+    #     loss, grad = compute_loss_and_grad_f(params)
+    #     losses.append(loss)
+    #     F_hist.append(params[0])
+    #     print(j, 
+    #         'loss=', loss, 
+    #         '   grad=', grad,
+    #         '   params=', params)
 
-    init_e = 1e3
-    initial_params = [init_e, init_e, init_e, init_e, 5]
-
-    E1_hist.append(initial_params[0])
-    E2_hist.append(initial_params[1])
-    E3_hist.append(initial_params[2])
-    E4_hist.append(initial_params[3])
-    F_hist.append(initial_params[4])
+    # E_block.fill(1e4)
+    init_e = 5e3
+    initial_params = []
+    for i in range(n_blocks):
+        initial_params.append(init_e)
+    E_hist.append(E_block.to_numpy().tolist())
 
     tol = 1e-3600
     options = {
         'disp': 1, 
-        'xatol': tol, 
-        'fatol': tol, 
-        'xtol': tol, 
+        # 'xatol': tol, 
+        # 'fatol': tol, 
+        # 'xtol': tol, 
         'ftol': tol, 
         'gtol': tol,
         'tol': tol,
-        'catol': tol,
-        'barrier_tol': tol,
-        'maxCGit': 1000,
-        'maxfun': 1000, 
-        'maxiter': 1000,
+        # 'catol': tol,
+        # 'barrier_tol': tol,
+        # 'maxCGit': 1000,
+        # 'maxfun': 1000, 
+        # 'maxiter': 1000,
         'verbose': 2,
         'adaptive': True
         }
-
-    # result = minimize(compute_loss_and_grad,
-    #                   initial_params,
-    #                   method='L-BFGS-B',
-    #                   jac=True,
-    #                   hess='2-point',
-    #                   callback=callback_fn,
-    #                   options=options)
-    # print(result)
-
-    for i in range(n_ef_it):
-        print("E opt ", i)
-        result = minimize(compute_loss_and_grad_e, 
-                        initial_params[:4], 
-                        method='L-BFGS-B', 
-                        jac=True, 
-                        hess='2-point',
-                        # bounds=[(0, 1e10), (0, 1e10), (0, 1e10), (0, 1e10)],
-                        callback=callback_fn_e,
-                        options=options)
-        initial_params[:4] = result.x
-        it_hist.append(result.nit)
-        print(result)
+    result = minimize(compute_loss_and_grad,
+                      np.array(initial_params),
+                      method='L-BFGS-B',
+                      jac=True,
+                    #   hess='2-point',
+                      callback=callback_fn,
+                      options=options)
+    print(result)
+    
+    # for i in range(n_ef_it):
+    #     print("E opt ", i)
+    #     result = minimize(compute_loss_and_grad_e, 
+    #                     initial_params[:4], 
+    #                     method='L-BFGS-B', 
+    #                     jac=True, 
+    #                     hess='2-point',
+    #                     # bounds=[(0, 1e10), (0, 1e10), (0, 1e10), (0, 1e10)],
+    #                     callback=callback_fn_e,
+    #                     options=options)
+    #     initial_params[:4] = result.x
+    #     it_hist.append(result.nit)
+    #     print(result)
         
-        print("F opt ", i)
-        result = minimize(compute_loss_and_grad_f, 
-                        initial_params[-1], 
-                        method='L-BFGS-B', 
-                        jac=True, 
-                        hess='2-point',
-                        callback=callback_fn_f,
-                        options=options)
-        it_hist.append(result.nit)
-        initial_params[-1] = result.x
+    #     print("F opt ", i)
+    #     result = minimize(compute_loss_and_grad_f, 
+    #                     initial_params[-1], 
+    #                     method='L-BFGS-B', 
+    #                     jac=True, 
+    #                     hess='2-point',
+    #                     callback=callback_fn_f,
+    #                     options=options)
+    #     it_hist.append(result.nit)
+    #     initial_params[-1] = result.x
 
-        print(result)
+    #     print(result)
 
     
 
 
     result_dict = {
         "losses" : losses,
-        "E1" : E1_hist,
-        "E2" : E2_hist,
-        "E3" : E3_hist,
-        "E4" : E4_hist,
-        "F" : F_hist,
-        "it_hist": it_hist
+        "E_hist" : E_hist
     }
 
-    with open("result_db_10_init_1e3.json", "w") as outfile: 
+    with open("result_2_1_init_5e3_full.json", "w") as outfile: 
         json.dump(result_dict, outfile)
 
     plt.title("Optimization of Block Subject to Dynamic Rolling Force via $\epsilon (t)$")
@@ -590,13 +573,13 @@ elif optim == 'lbfgs':
     plt.show()
 
 
-    plt.title(param_labels[0] + " Learning Curve")
-    plt.ylabel(param_labels[0])
-    plt.xlabel("Iterations")
-    plt.hlines(param_true[0], 0, sum(it_hist), color='r', label='True Value')
-    plt.plot(E1_hist, color='b', label='Estimated Value')
-    plt.legend()
-    plt.show()
+    # plt.title(param_labels[0] + " Learning Curve")
+    # plt.ylabel(param_labels[0])
+    # plt.xlabel("Iterations")
+    # plt.hlines(param_true[0], 0, sum(it_hist), color='r', label='True Value')
+    # plt.plot(E1_hist, color='b', label='Estimated Value')
+    # plt.legend()
+    # plt.show()
 
     # plt.title(param_labels[1] + " Learning Curve")
     # plt.ylabel(param_labels[1])

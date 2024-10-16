@@ -21,7 +21,7 @@ p_mass = 1
 p_vol = 1.1
 nu = 0.2
 
-max_steps = 1024
+max_steps = 1
 steps = max_steps
 gravity = 0
 
@@ -207,7 +207,7 @@ def g2p(f: ti.i32):
         v[f + 1, p] = new_v
         x[f + 1, p] = x[f, p] + dt * v[f + 1, p]
         C[f + 1, p] = new_C
-
+        print(p, base)
 
 
 @ti.kernel
@@ -239,7 +239,7 @@ fc, bw, bwr = 100, 0.5, -6
 ref = np.power(10.0, bwr / 20.0)
 a = -(np.pi * fc * bw) ** 2 / (4.0 * np.log(ref))
 e_np = np.exp(-a * t * t)
-e = ti.field(ti.f32, (1024, 17))
+e = ti.field(ti.f32, (steps, 17))
 e.from_numpy(e_np)
 
 @ti.kernel
@@ -326,5 +326,5 @@ x_np = x.to_numpy()
 #     frame += 1
 
 
-np.save('x_true.npy', x_np)
-np.save('strain2_true.npy', strain2.to_numpy())
+# np.save('x_true.npy', x_np)
+# np.save('strain2_true.npy', strain2.to_numpy())

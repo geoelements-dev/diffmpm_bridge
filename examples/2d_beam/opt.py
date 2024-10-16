@@ -435,7 +435,7 @@ elif optim == 'lbfgs':
 
         loss_val = loss[None]
         grad_val = [E1.grad[None], E2.grad[None], E3.grad[None], E4.grad[None]]
-
+        print(type(grad_val))
         return loss_val, grad_val
     
     def compute_loss_and_grad_f(params):
@@ -470,7 +470,7 @@ elif optim == 'lbfgs':
             '   params=', params)
         
     def callback_fn_e(intermediate_result):
-        params = intermediate_result.x
+        params = intermediate_result
         loss, grad = compute_loss_and_grad_e(params)
         losses.append(loss)
         E1_hist.append(params[0])
@@ -483,7 +483,7 @@ elif optim == 'lbfgs':
             '   params=', params)
         
     def callback_fn_f(intermediate_result):
-        params = intermediate_result.x
+        params = intermediate_result
         loss, grad = compute_loss_and_grad_f(params)
         losses.append(loss)
         F_hist.append(params[0])
