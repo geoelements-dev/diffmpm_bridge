@@ -18,7 +18,7 @@ dx = 1 / n_grid
 inv_dx = 1 / dx
 dt = 1e-4
 p_mass = 1
-p_vol = 1.1
+p_vol = 1
 nu = 0.2
 
 max_steps = 1024
@@ -119,9 +119,29 @@ def grid_op(f: ti.i32):
         if i == 2 and j == 6:
             v_out[0] = 0
             v_out[1] = 0
+        if i == 1 and j == 6:
+            v_out[0] = 0
+            v_out[1] = 0
+        if i == 2 and j == 5:
+            v_out[0] = 0
+            v_out[1] = 0
+        if i == 1 and j == 5:
+            v_out[0] = 0
+            v_out[1] = 0
         if i == 18 and j == 6:
+            v_out[0] = 0
+            v_out[1] = 0
+        if i == 19 and j == 6:
+            v_out[0] = 0
+            v_out[1] = 0
+        if i == 18 and j == 5:
+            v_out[0] = 0
+            v_out[1] = 0
+        if i == 19 and j == 5:
+            v_out[0] = 0
             v_out[1] = 0
         grid_v_out[f, i, j] = v_out
+
 
 
 
@@ -213,7 +233,7 @@ def g2p(f: ti.i32):
 @ti.kernel
 def compute_loss():
     for i in range(steps - 1):
-        for j in range(n_particles):
+        for j in range(Nx):
             dist = (target_strain[i, j] - strain2[i, j]) ** 2
             # dist = (1 / ((steps - 1) * n_particles)) * \
             #     (target_strain[i, j] - strain2[i, j]) ** 2
@@ -247,8 +267,8 @@ def assign_ext_load():
     for t, node in ti.ndrange(max_steps, (2, 19)):
             f_ext[t, node, 8] = [0, -5* e[t, node - 2]]
 
-n_blocks_y = 1
-n_blocks_x = 2
+n_blocks_y = 2
+n_blocks_x = 16
 n_blocks = n_blocks_y * n_blocks_x
 block_nx = int(Nx / n_blocks_x)
 block_ny = int(Ny / n_blocks_y)
@@ -279,7 +299,7 @@ for i in range(Nx):
 
 print('loading target')
 
-target_strain_np = np.load('strain2_true.npy')
+target_strain_np = np.load('strain2_true2.npy')
 target_strain = ti.Matrix.field(dim,
                             dim,
                            dtype=real,
@@ -468,7 +488,7 @@ elif optim == 'lbfgs':
         E_hist.append(params.tolist())
         print(j, 
             'loss=', loss, 
-            '   grad=', grad,
+            # '   grad=', grad,
             '   params=', params)
         
     # def callback_fn_e(intermediate_result):
@@ -562,15 +582,15 @@ elif optim == 'lbfgs':
         "E_hist" : E_hist
     }
 
-    with open("result_2_1_init_5e3_full.json", "w") as outfile: 
+    with open(f"result_{n_blocks_x}_{n_blocks_y}_init_5e3.json", "w") as outfile: 
         json.dump(result_dict, outfile)
 
-    plt.title("Optimization of Block Subject to Dynamic Rolling Force via $\epsilon (t)$")
-    plt.ylabel("Loss")
-    plt.xlabel("LBFGS-B Iterations")
-    plt.plot(losses)
-    plt.yscale('log')
-    plt.show()
+    # plt.title("Optimization of Block Subject to Dynamic Rolling Force via $\epsilon (t)$")
+    # plt.ylabel("Loss")
+    # plt.xlabel("LBFGS-B Iterations")
+    # plt.plot(losses)
+    # plt.yscale('log')
+    # plt.show()
 
 
     # plt.title(param_labels[0] + " Learning Curve")

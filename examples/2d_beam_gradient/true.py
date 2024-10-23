@@ -18,10 +18,10 @@ dx = 1 / n_grid
 inv_dx = 1 / dx
 dt = 1e-4
 p_mass = 1
-p_vol = 1.1
+p_vol = 1
 nu = 0.2
 
-max_steps = 1
+max_steps = 1024
 steps = max_steps
 gravity = 0
 
@@ -119,7 +119,26 @@ def grid_op(f: ti.i32):
         if i == 2 and j == 6:
             v_out[0] = 0
             v_out[1] = 0
+        if i == 1 and j == 6:
+            v_out[0] = 0
+            v_out[1] = 0
+        if i == 2 and j == 5:
+            v_out[0] = 0
+            v_out[1] = 0
+        if i == 1 and j == 5:
+            v_out[0] = 0
+            v_out[1] = 0
         if i == 18 and j == 6:
+            v_out[0] = 0
+            v_out[1] = 0
+        if i == 19 and j == 6:
+            v_out[0] = 0
+            v_out[1] = 0
+        if i == 18 and j == 5:
+            v_out[0] = 0
+            v_out[1] = 0
+        if i == 19 and j == 5:
+            v_out[0] = 0
             v_out[1] = 0
         grid_v_out[f, i, j] = v_out
 
@@ -207,7 +226,6 @@ def g2p(f: ti.i32):
         v[f + 1, p] = new_v
         x[f + 1, p] = x[f, p] + dt * v[f + 1, p]
         C[f + 1, p] = new_C
-        print(p, base)
 
 
 @ti.kernel
@@ -251,13 +269,8 @@ def assign_ext_load():
 def assign_E():
     for i in range(n_particles):
         col = i % Nx
-        if col < 20 or col >= 60:
-            E[i] = 1.1e4
-        elif col >= 20 and col < 40:
-            E[i] = 0.9e4
-        else:
-            E[i] = 0.9e4
 
+        E[i] = 5000 + 10000 * (col / Nx)
 
 
 
@@ -326,5 +339,5 @@ x_np = x.to_numpy()
 #     frame += 1
 
 
-# np.save('x_true.npy', x_np)
-# np.save('strain2_true.npy', strain2.to_numpy())
+np.save('x_true.npy', x_np)
+np.save('strain2_true2.npy', strain2.to_numpy())
