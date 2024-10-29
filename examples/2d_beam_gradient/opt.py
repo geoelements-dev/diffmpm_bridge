@@ -233,7 +233,7 @@ def g2p(f: ti.i32):
 @ti.kernel
 def compute_loss():
     for i in range(steps - 1):
-        for j in range(Nx):
+        for j in range(n_particles):
             dist = (target_strain[i, j] - strain2[i, j]) ** 2
             # dist = (1 / ((steps - 1) * n_particles)) * \
             #     (target_strain[i, j] - strain2[i, j]) ** 2
@@ -515,7 +515,7 @@ elif optim == 'lbfgs':
     #         '   params=', params)
 
     # E_block.fill(1e4)
-    init_e = 5e3
+    init_e = 15e3
     initial_params = []
     for i in range(n_blocks):
         initial_params.append(init_e)
@@ -582,7 +582,7 @@ elif optim == 'lbfgs':
         "E_hist" : E_hist
     }
 
-    with open(f"result_{n_blocks_x}_{n_blocks_y}_init_5e3.json", "w") as outfile: 
+    with open(f"result_{n_blocks_x}_{n_blocks_y}_init_15e3_full.json", "w") as outfile: 
         json.dump(result_dict, outfile)
 
     # plt.title("Optimization of Block Subject to Dynamic Rolling Force via $\epsilon (t)$")
