@@ -264,15 +264,20 @@ e.from_numpy(e_np)
 def assign_ext_load():
     for t, node in ti.ndrange(max_steps, (2, 19)):
             f_ext[t, node, 8] = [0, -f_ext_scale* e[t, node - 2]]
-
 @ti.kernel
 def assign_E():
+    
     for i in range(n_particles):
-        col = i % Nx
+        if i < 2 * n_particles:
+            E[i] = 1000
+        else:
+            E[i] = 100000
 
-        E[i] = 5000 + 10000 * (col / Nx)
-
-
+    
+    E[42] = 1
+    E[43] = 1
+    E[122] = 1
+    E[123] = 1
 
 for i in range(n_particles):
     F[0, i] = [[1, 0], [0, 1]]
@@ -324,20 +329,22 @@ x_np = x.to_numpy()
 # load_locs_np = load_locs.to_numpy()
 # for s in range(0, steps, 1):
 #     scale = 4
-#     # gui.circles(x_np[s], color=0xFFFFFF, radius=1.5)
-#     x_np_reshape = einops.rearrange(x_np[s], '(w x h y) c -> (h w) x y c', h=4, w=1, x=10, c=2)
-#     gui.circles(x_np_reshape[[0,3]].reshape((-1, dim)), color=0x198C19, radius=1.5)
-#     gui.circles(x_np_reshape[[1,2]].reshape((-1, dim)), color=0xFF4400, radius=1.5)
-#     # gui.circles(x_np_reshape[[2]].reshape((-1, dim)), color=0xFDB100, radius=1.5)
-#     gui.circles(node_locs_np[s], color=0xFFA500, radius=1)
+#     gui.circles(x_np[s, :2*Nx], color=0x198C19, radius=1.5)
+#     gui.circles(x_np[s, [42,43,42+80,43+80]], color=0xFF0000, radius=1.5)
+#     gui.circles(x_np[s, 2*Nx:], color=0xFFA500, radius=1.5)
+#     # x_np_reshape = einops.rearrange(x_np[s], '(w x h y) c -> (h w) x y c', h=4, w=1, x=10, c=2)
+#     # gui.circles(x_np_reshape[[0,3]].reshape((-1, dim)), color=0x198C19, radius=1.5)
+#     # gui.circles(x_np_reshape[[1,2]].reshape((-1, dim)), color=0xFF4400, radius=1.5)
+#     # # gui.circles(x_np_reshape[[2]].reshape((-1, dim)), color=0xFDB100, radius=1.5)
+#     gui.circles(node_locs_np[s], color=0xFFFFFF, radius=1)
     
 #     # gui.circle(load_locs_np[s], color=0xFF0000, radius=10)
 #     gui.arrow(orig=load_locs_np[s], direction = [0, -dx], color=0xFF0000, radius=3)
 #     gui.triangle([2 * dx, 6 * dx], [1.5 * dx, 5.5 * dx], [2.5 * dx, 5.5 * dx], color=0x00FF00)
-#     gui.circle([18 * dx, 5.5 * dx], color=0x00FF00, radius=15)
+#     gui.triangle([18 * dx, 6 * dx], [17.5 * dx, 5.5 * dx], [18.5 * dx, 5.5 * dx], color=0x00FF00)
 #     gui.show(f'{out_dir}/{frame:06d}.png')
 #     frame += 1
 
 
 np.save('x_true.npy', x_np)
-np.save('strain2_true2.npy', strain2.to_numpy())
+np.save('strain2_true.npy', strain2.to_numpy())

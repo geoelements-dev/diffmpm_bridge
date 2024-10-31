@@ -228,16 +228,23 @@ def g2p(f: ti.i32):
         x[f + 1, p] = x[f, p] + dt * v[f + 1, p]
         C[f + 1, p] = new_C
 
-
+# diff = ti.field(real, shape=(max_steps, 10))
+# target_diff = ti.field(real, shape=(max_steps, 10))
 
 @ti.kernel
 def compute_loss():
     for i in range(steps - 1):
-        for j in range(Nx):
-            dist = (target_strain[i, j] - strain2[i, j]) ** 2
-            # dist = (1 / ((steps - 1) * n_particles)) * \
-            #     (target_strain[i, j] - strain2[i, j]) ** 2
-            loss[None] += 0.5 * (dist[0, 0])*1e16# + dist[1, 1]) * 1e16
+        for j in range(10):
+            sensor = j * 8
+            diff = x[i, sensor + 8] - x[i, sensor]
+            target_diff = target_x[i, sensor + 8] - target_x[i, sensor]
+
+            if j == 9:
+                diff = x[i, sensor + 7] - x[i, sensor]
+                target_diff = target_x[i, sensor + 7] - target_x[i, sensor]
+    
+            dist = (target_diff - diff) ** 2
+            loss[None] += 0.5 * (dist[0])*1e16# + dist[1, 1]) * 1e16
 
 def substep(s):
     p2g(s)
@@ -267,8 +274,8 @@ def assign_ext_load():
     for t, node in ti.ndrange(max_steps, (2, 19)):
             f_ext[t, node, 8] = [0, -5* e[t, node - 2]]
 
-n_blocks_y = 2
-n_blocks_x = 16
+n_blocks_y = 1
+n_blocks_x = 10
 n_blocks = n_blocks_y * n_blocks_x
 block_nx = int(Nx / n_blocks_x)
 block_ny = int(Ny / n_blocks_y)
@@ -299,9 +306,14 @@ for i in range(Nx):
 
 print('loading target')
 
-target_strain_np = np.load('strain2_true2.npy')
+target_strain_np = np.load('strain2_true.npy')
 target_strain = ti.Matrix.field(dim,
                             dim,
+                           dtype=real,
+                           shape=(max_steps, n_particles),
+                           needs_grad=True)
+target_x_np = np.load('x_true.npy')
+target_x = ti.Vector.field(dim,
                            dtype=real,
                            shape=(max_steps, n_particles),
                            needs_grad=True)
