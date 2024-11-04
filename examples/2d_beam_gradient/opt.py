@@ -299,7 +299,7 @@ for i in range(Nx):
 
 print('loading target')
 
-target_strain_np = np.load('strain2_true2.npy')
+target_strain_np = np.load('strain2_true2_reverse.npy')
 target_strain = ti.Matrix.field(dim,
                             dim,
                            dtype=real,
@@ -515,7 +515,7 @@ elif optim == 'lbfgs':
     #         '   params=', params)
 
     # E_block.fill(1e4)
-    init_e = 15e3
+    init_e = 5e3
     initial_params = []
     for i in range(n_blocks):
         initial_params.append(init_e)
@@ -582,7 +582,7 @@ elif optim == 'lbfgs':
         "E_hist" : E_hist
     }
 
-    with open(f"result_{n_blocks_x}_{n_blocks_y}_init_15e3_full.json", "w") as outfile: 
+    with open(f"result_{n_blocks_x}_{n_blocks_y}_init_5e3_full_reverse.json", "w") as outfile: 
         json.dump(result_dict, outfile)
 
     # plt.title("Optimization of Block Subject to Dynamic Rolling Force via $\epsilon (t)$")
