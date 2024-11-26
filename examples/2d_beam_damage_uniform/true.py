@@ -269,7 +269,7 @@ def assign_E():
     
     for i in range(n_particles):
         if i < 2 * n_particles:
-            E[i] = 5000
+            E[i] = 10000
         else:
             E[i] = 10000
 

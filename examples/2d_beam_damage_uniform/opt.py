@@ -230,26 +230,58 @@ def g2p(f: ti.i32):
 
 # diff = ti.field(real, shape=(max_steps, 10))
 # target_diff = ti.field(real, shape=(max_steps, 10))
-
+weighed_loss = True
+obs_choices = ["full", "row", "sensor"]
+obs = obs_choices[1]
 @ti.kernel
 def compute_loss():
     for i in range(steps - 1):
-        # for j in range(10):
-        #     sensor = j * 8
-        #     diff = x[i, sensor + 8] - x[i, sensor]
-        #     target_diff = (target_x[i, sensor + 8] - target_x[i, sensor])
+        # for j in range(n_particles):
+        #     # sensor = j * 8
+        #     # diff = x[i, sensor + 8] - x[i, sensor]
+        #     # target_diff = (target_x[i, sensor + 8] - target_x[i, sensor])
 
-        #     if j == 9:
-        #         diff = x[i, sensor + 7] - x[i, sensor]
-        #         target_diff = target_x[i, sensor + 7] - target_x[i, sensor]
+        #     # if j == 9:
+        #     #     diff = x[i, sensor + 7] - x[i, sensor]
+        #     #     target_diff = target_x[i, sensor + 7] - target_x[i, sensor]
     
-        #     dist = (target_diff - diff) ** 2
-        #     loss[None] += 0.5 * (dist[0])*1e16# + dist[1, 1]) * 1e16
-        for j in range(n_particles):
-            dist = (target_strain[i, j] - strain2[i, j]) ** 2
-            # dist = (1 / ((steps - 1) * n_particles)) * \
-            #     (target_strain[i, j] - strain2[i, j]) ** 2
-            loss[None] += 0.5 * (dist[0, 0])*1e36# + dist[1, 1]) * 1e16
+        #     dist = (x[i, j] - target_x[i, j]) ** 2
+        #     loss[None] += 0.5 * (dist[0]+dist[1])*1e150# + dist[1, 1]) * 1e16
+        if obs == "full":
+            for j in range(n_particles):
+                dist = (target_strain[i, j] - strain2[i, j]) ** 2
+                # dist = (1 / ((steps - 1) * n_particles)) * \
+                #     (target_strain[i, j] - strain2[i, j]) ** 2
+                if weighed_loss:
+                    loss[None] += 0.5 * (dist[0, 0])*1e36* (2 - ti.math.sin(i * ti.math.pi / 80))# + dist[1, 1]) * 1e16
+                
+                else:
+                    loss[None] += 0.5 * (dist[0, 0])*1e36# + dist[1, 1]) * 1e16
+        elif obs == "row":
+            for j in range(Nx):
+                dist = (target_strain[i, j] - strain2[i, j]) ** 2
+                # dist = (1 / ((steps - 1) * n_particles)) * \
+                #     (target_strain[i, j] - strain2[i, j]) ** 2
+                if weighed_loss:
+                    loss[None] += 0.5 * (dist[0, 0])*1e36*(2 - ti.math.sin(i * ti.math.pi / 80))#(2 - ti.math.sin(i * ti.math.pi / 80))# / dist[0,0]# + dist[1, 1]) * 1e16
+                
+                else:
+                    loss[None] += 0.5 * (dist[0, 0])*1e36# + dist[1, 1]) * 1e16
+        elif obs == "sensor":
+            for j in range(16):
+                dist = (target_strain[i, j*5] - strain2[i, j*5]) ** 2
+                # dist = (1 / ((steps - 1) * n_particles)) * \
+                #     (target_strain[i, j] - strain2[i, j]) ** 2
+                if weighed_loss:
+                    loss[None] += 0.5 * (dist[0, 0])*1e36*(2 - ti.math.sin(i * ti.math.pi / 80))# + dist[1, 1]) * 1e16
+                
+                else:
+                    loss[None] += 0.5 * (dist[0, 0])*1e36# + dist[1, 1]) * 1e16
+
+@ti.kernel
+def loss_weight(i: ti.i32) -> ti.f32:
+    return ti.math.pow(i - 40, 2.0) + 1
+
 
 def substep(s):
     p2g(s)
@@ -279,8 +311,8 @@ def assign_ext_load():
     for t, node in ti.ndrange(max_steps, (2, 19)):
             f_ext[t, node, 8] = [0, -5* e[t, node - 2]]
 
-n_blocks_y = 1
-n_blocks_x = 10
+n_blocks_y = 2
+n_blocks_x = 16
 n_blocks = n_blocks_y * n_blocks_x
 block_nx = int(Nx / n_blocks_x)
 block_ny = int(Ny / n_blocks_y)
@@ -288,21 +320,21 @@ block_ny = int(Ny / n_blocks_y)
 
 @ti.kernel
 def assign_E():
-    for i in range(n_particles):
-        row = i // Nx
-        col = i % Nx
-        block_index_x = i // block_nx
+    # for i in range(n_particles):
+        # row = i // Nx
+        # col = i % Nx
+        # block_index_x = i // block_nx
         
-        if row > 1:
-            E[i] = 5000
-        else:
-            E[i] = E_block[block_index_x]
+        # if row > 1:
+        #     E[i] = 5000
+        # else:
+        #     E[i] = E_block[block_index_x]
         
-    # for i in range(Nx):
-    #     for j in range(Ny):
-    #         block_index_x = i // block_nx
-    #         block_index_y = j // block_ny
-    #         E[j*Nx+i] = E_block[block_index_x + block_index_y * n_blocks_x]
+    for i in range(Nx):
+        for j in range(Ny):
+            block_index_x = i // block_nx
+            block_index_y = j // block_ny
+            E[j*Nx+i] = E_block[block_index_x + block_index_y * n_blocks_x]
 
 
 
@@ -320,8 +352,12 @@ for i in range(Nx):
 
 
 print('loading target')
-
-target_strain_np = np.load('strain2_true.npy')
+damaged = False
+if damaged: 
+    target_strain_name = "strain2_true.npy"
+else:
+    target_strain_name = "strain2_true_original.npy"
+target_strain_np = np.load(target_strain_name)
 target_strain = ti.Matrix.field(dim,
                             dim,
                            dtype=real,
@@ -542,7 +578,7 @@ elif optim == 'lbfgs':
     #         '   params=', params)
 
     # E_block.fill(1e4)
-    init_e = 10000
+    init_e = 5e3
     initial_params = []
     for i in range(n_blocks):
         initial_params.append(init_e)
@@ -608,8 +644,13 @@ elif optim == 'lbfgs':
         "losses" : losses,
         "E_hist" : E_hist
     }
-
-    with open(f"result_brick_only.json", "w") as outfile: 
+    filename = f"result_{n_blocks_x}_{n_blocks_y}_init_{int(init_e)}_" + obs
+    if weighed_loss:
+        filename = filename + "_weighedloss"
+    if damaged:
+        filename = filename + "_damaged"
+    
+    with open(filename + ".json", "w") as outfile: 
         json.dump(result_dict, outfile)
 
     # plt.title("Optimization of Block Subject to Dynamic Rolling Force via $\epsilon (t)$")
