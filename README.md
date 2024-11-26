@@ -32,3 +32,5 @@ To make a .gif of these files, you can run `python make_gif.py -i "path/to/png/f
 - `2d_beam_damage` : 2d_beam experiment with damage identification, fill layer + masonry layer
 
 - `2d_beam_damage_uniform` : 2d_beam experiment with damage id, uniform undamaged layer
+
+- `2d_beam_gaussian_dmg` : `2d_beam_damage_uniform` but optimization is done over a gaussian elastic field
