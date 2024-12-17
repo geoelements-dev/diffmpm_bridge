@@ -471,9 +471,7 @@ if optim == 'lbfgs':
     result_dict = {
         "losses" : losses,
         "E_final" : E_final,
-        "params" : result.x.tolist(),
-        "final_strain" : strain2.to_numpy(),
-        "final_x" : x.to_numpy()
+        "params" : result.x.tolist()
     }
     filename = f"result_l_{initial_params[0]}_s_{initial_params[1]}_h_{initial_params[2]}_" + obs
     if weighed_loss:

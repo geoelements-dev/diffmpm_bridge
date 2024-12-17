@@ -233,7 +233,7 @@ def g2p(f: ti.i32):
 # target_diff = ti.field(real, shape=(max_steps, 10))
 weighed_loss = False
 obs_choices = ["full", "row", "sensor"]
-obs = obs_choices[0]
+obs = obs_choices[1]
 @ti.kernel
 def compute_loss():
     for i in range(steps - 1):
@@ -322,13 +322,9 @@ def assign_E():
         row = i // Nx
         col = i % Nx
         
-        if row > 2:
-            E[i] = 10000
-        else:
-            E[i] = 10000 - exp_params[2] * ti.math.clamp( \
-                1 / (ti.math.sqrt(2.0 * 3.1415) * exp_params[1]) \
-                * ti.math.exp(-ti.math.pow(((col)/(Nx) * 0.8 + 0.1 - exp_params[0]) / exp_params[1], 2.0) / 2),
-                0, 1)
+        E[i] = 10000 - exp_params[0] \
+            * ti.math.exp(-((ti.math.pow(((col) / (Nx) * 0.8 + 0.1 - exp_params[1]) / exp_params[2], 2.0) \
+                           + ti.math.pow(((row) / (Ny) * 0.8 + 0.1 - (exp_params[1] - 0.21)) / exp_params[2], 2.0)) / 2))
         
     # for i in range(Nx):
     #     for j in range(Ny):
@@ -399,88 +395,76 @@ height = ti.field(dtype=real, shape=(), needs_grad=True)
 
 losses = []
 
-print('running grad iterations')
-optim = 'lbfgs'
-if optim == 'lbfgs':
-    from scipy.optimize import minimize
-
-    n_ef_it = 1
-    E_hist = []
-    it_hist = []
-
-    def compute_loss_and_grad(params):
-        grid_v_in.fill(0)
-        grid_m_in.fill(0)
-        loss[None] = 0
-        
-        # loc[None] = params[0]
-        # std[None] = params[1]
-        # height[None] = params[2]
-
-        for i in range(3):
-            exp_params[i] = params[i]
-
-        with ti.ad.Tape(loss=loss):
-            assign_E()
-            assign_ext_load()
-            for s in range(steps - 1):
-                substep(s)
-            compute_loss()
-
-        loss_val = loss[None]
-        grad_val = [exp_params.grad[i] for i in range(3)]
 
 
-        return loss_val, grad_val
+
+
+
+
+def eval(param1, param2, param3):
+    params = [param1, param2, param3]
+    grid_v_in.fill(0)
+    grid_m_in.fill(0)
+    loss[None] = 0
     
-    def callback_fn(intermediate_result):
-        params = intermediate_result
-        loss, grad = compute_loss_and_grad(params)
-        losses.append(loss)
-        print(j, 
-            'loss=', loss, 
-            '   grad=', grad,
-            '   params=', params)
-   
-    initial_params = [0.5, 0.05, 5000]
 
-    tol = 1e-3600
-    options = {
-        'disp': 1, 
-        'ftol': tol, 
-        'gtol': tol,
-        'tol': tol,
-        'verbose': 2,
-        'adaptive': True
-        }
-    result = minimize(compute_loss_and_grad,
-                      np.array(initial_params),
-                      method='L-BFGS-B',
-                      jac=True,
-                    # #   hess='2-point',
-                      bounds=((0, 1), (0, None), (0, None)),
-                      callback=callback_fn,
-                      options=options)
-    print(result)
-    
-    E_final = []
-    for i in range(n_particles):
-        E_final.append(E[i])
+    for i in range(3):
+        exp_params[i] = params[i]
+
+    assign_E()
+    assign_ext_load()
+    for s in range(steps - 1):
+        substep(s)
+    compute_loss()
+
+    loss_val = loss[None]
 
 
-    result_dict = {
-        "losses" : losses,
-        "E_final" : E_final,
-        "params" : result.x.tolist(),
-        "final_strain" : strain2.to_numpy(),
-        "final_x" : x.to_numpy()
-    }
-    filename = f"result_l_{initial_params[0]}_s_{initial_params[1]}_h_{initial_params[2]}_" + obs
-    if weighed_loss:
-        filename = filename + "_weighedloss"
-    if damaged:
-        filename = filename + "_damaged"
-    
-    with open(filename + ".json", "w") as outfile: 
-        json.dump(result_dict, outfile)
+    return loss_val
 
+import numpy as np
+import pandas as pd
+from tqdm import tqdm  # Progress bar
+import os
+
+# Define parameter ranges
+a_range = np.linspace(0, 10000, 21)
+b_range = np.linspace(0.2, 0.8, 21)
+c_range = [0.01]#np.linspace(0, 0.1, 11)  # Example: 20 values from 0 to 6
+
+# Prepare to store results
+results = []
+
+# Total number of iterations for tqdm
+total_iterations = len(a_range) * len(b_range) * len(c_range)
+
+# Perform the parameter sweep with progress bar
+with tqdm(total=total_iterations, desc="Sweeping Parameters") as pbar:
+    for param1 in a_range:
+        for param2 in b_range:
+            for param3 in c_range:
+                current_loss = eval(param1, param2, param3)
+                results.append({
+                    "a": param1,
+                    "b": param2,
+                    "c": param3,
+                    "loss": current_loss
+                })
+                pbar.update(1)
+
+# Convert results to a DataFrame
+results_df = pd.DataFrame(results)
+
+# File to save results
+results_file = "constant_c_row.csv"
+
+# Check if the file exists
+file_exists = os.path.isfile(results_file)
+
+# Append to the CSV file
+results_df.to_csv(
+    results_file,
+    mode='a',  # Append mode
+    header=not file_exists,  # Write header only if file does not exist
+    index=False
+)

@@ -1,8 +1,7 @@
 import taichi as ti
 import numpy as np
 import matplotlib.pyplot as plt
-import json 
-from math import pi
+import json, einops
 
 ti.reset()
 real = ti.f32
@@ -145,7 +144,6 @@ def grid_op(f: ti.i32):
 
 
 
-
 @ti.kernel
 def g2p(f: ti.i32):
     for p in range(n_particles):
@@ -229,57 +227,15 @@ def g2p(f: ti.i32):
         x[f + 1, p] = x[f, p] + dt * v[f + 1, p]
         C[f + 1, p] = new_C
 
-# diff = ti.field(real, shape=(max_steps, 10))
-# target_diff = ti.field(real, shape=(max_steps, 10))
-weighed_loss = False
-obs_choices = ["full", "row", "sensor"]
-obs = obs_choices[0]
+
 @ti.kernel
 def compute_loss():
     for i in range(steps - 1):
-        # for j in range(n_particles):
-        #     # sensor = j * 8
-        #     # diff = x[i, sensor + 8] - x[i, sensor]
-        #     # target_diff = (target_x[i, sensor + 8] - target_x[i, sensor])
-
-        #     # if j == 9:
-        #     #     diff = x[i, sensor + 7] - x[i, sensor]
-        #     #     target_diff = target_x[i, sensor + 7] - target_x[i, sensor]
-    
-        #     dist = (x[i, j] - target_x[i, j]) ** 2
-        #     loss[None] += 0.5 * (dist[0]+dist[1])*1e150# + dist[1, 1]) * 1e16
-        if obs == "full":
-            for j in range(n_particles):
-                dist = (target_strain[i, j] - strain2[i, j]) ** 2
-                # dist = (1 / ((steps - 1) * n_particles)) * \
-                #     (target_strain[i, j] - strain2[i, j]) ** 2
-                if weighed_loss:
-                    loss[None] += 0.5 * (dist[0, 0])*1e36* (2 - ti.math.sin(i * ti.math.pi / 80))# + dist[1, 1]) * 1e16
-                
-                else:
-                    loss[None] += 0.5 * (dist[0, 0])*1e20# + dist[1, 1]) * 1e16
-        elif obs == "row":
-            for j in range(Nx):
-                dist = (target_strain[i, j] - strain2[i, j]) ** 2
-                # dist = (1 / ((steps - 1) * n_particles)) * \
-                #     (target_strain[i, j] - strain2[i, j]) ** 2
-                if weighed_loss:
-                    loss[None] += 0.5 * (dist[0, 0])*1e36*(2 - ti.math.sin(i * ti.math.pi / 80))#(2 - ti.math.sin(i * ti.math.pi / 80))# / dist[0,0]# + dist[1, 1]) * 1e16
-                
-                else:
-                    loss[None] += 0.5 * (dist[0, 0])*1e36# + dist[1, 1]) * 1e16
-        elif obs == "sensor":
-            for j in range(16):
-                dist = (target_strain[i, j*5] - strain2[i, j*5]) ** 2
-                # dist = (1 / ((steps - 1) * n_particles)) * \
-                #     (target_strain[i, j] - strain2[i, j]) ** 2
-                if weighed_loss:
-                    loss[None] += 0.5 * (dist[0, 0])*1e36*(2 - ti.math.sin(i * ti.math.pi / 80))# + dist[1, 1]) * 1e16
-                
-                else:
-                    loss[None] += 0.5 * (dist[0, 0])*1e36# + dist[1, 1]) * 1e16
-
-
+        for j in range(n_particles):
+            dist = (target_strain[i, j] - strain2[i, j]) ** 2
+            # dist = (1 / ((steps - 1) * n_particles)) * \
+            #     (target_strain[i, j] - strain2[i, j]) ** 2
+            loss[None] += 0.5 * (dist[0, 0] + dist[1, 1])
 
 def substep(s):
     p2g(s)
@@ -289,7 +245,7 @@ def substep(s):
 
 
 f_ext_scale = 5
-velocity = 100 #16 / 20 / 0.1
+velocity = 100# 16 / 20 / 0.1
 node_x_locs = ti.Vector(np.arange(0, 17 / n_grid, 1 / n_grid))
 time_to_center = node_x_locs / velocity
 t_steps = ti.Vector(np.arange(max_steps)) * dt
@@ -301,43 +257,27 @@ fc, bw, bwr = 100, 0.5, -6
 ref = np.power(10.0, bwr / 20.0)
 a = -(np.pi * fc * bw) ** 2 / (4.0 * np.log(ref))
 e_np = np.exp(-a * t * t)
-e = ti.field(ti.f32, (1024, 17))
+e = ti.field(ti.f32, (steps, 17))
 e.from_numpy(e_np)
 
 @ti.kernel
 def assign_ext_load():
     for t, node in ti.ndrange(max_steps, (2, 19)):
-            f_ext[t, node, 8] = [0, -5* e[t, node - 2]]
-
-n_blocks_y = 1
-n_blocks_x = 80
-n_blocks = n_blocks_y * n_blocks_x
-block_nx = int(Nx / n_blocks_x)
-block_ny = int(Ny / n_blocks_y)
-
-
+            f_ext[t, node, 8] = [0, -f_ext_scale* e[t, node - 2]]
 @ti.kernel
 def assign_E():
+    
     for i in range(n_particles):
-        row = i // Nx
-        col = i % Nx
-        
-        if row > 2:
+        if i < 2 * n_particles:
             E[i] = 10000
         else:
-            E[i] = 10000 - exp_params[2] * ti.math.clamp( \
-                1 / (ti.math.sqrt(2.0 * 3.1415) * exp_params[1]) \
-                * ti.math.exp(-ti.math.pow(((col)/(Nx) * 0.8 + 0.1 - exp_params[0]) / exp_params[1], 2.0) / 2),
-                0, 1)
-        
-    # for i in range(Nx):
-    #     for j in range(Ny):
-    #         block_index_x = i // block_nx
-    #         block_index_y = j // block_ny
-    #         E[j*Nx+i] = E_block[block_index_x + block_index_y * n_blocks_x]
+            E[i] = 10000
 
-
-
+    
+    E[42] = 1000
+    E[43] = 1000
+    E[122] = 1000
+    E[123] = 1000
 
 for i in range(n_particles):
     F[0, i] = [[1, 0], [0, 1]]
@@ -349,138 +289,62 @@ for i in range(Nx):
         x[0, j * Nx + i] = [(i)/(Nx) * 0.8 + 0.1, (j)/(Ny) * 0.1 + 0.3]
 
 
+print('running target sim')
+assign_ext_load()
+assign_E()
+
+for s in range(steps):
+    # print(s)
+    substep(s)
 
 
-print('loading target')
-damaged = True
-if damaged: 
-    target_strain_name = "strain2_true.npy"
-else:
-    target_strain_name = "strain2_true_original.npy"
-target_strain_np = np.load(target_strain_name)
-target_strain = ti.Matrix.field(dim,
-                            dim,
-                           dtype=real,
-                           shape=(max_steps, n_particles),
-                           needs_grad=True)
-target_x_np = np.load('x_true.npy')
-target_x = ti.Vector.field(dim,
-                           dtype=real,
-                           shape=(max_steps, n_particles),
-                           needs_grad=True)
-
-
-# inject noise to eps_xx direction
-SNR_dB = 1000
-SNR_linear = 10 ** (SNR_dB / 10)
-# get avg signal power in eps_xx
-P_signal = np.mean(target_strain_np[:,:Nx,0,0]**2)
-P_noise = P_signal / SNR_linear
-# particle-wise noise
-noise = np.random.normal(0, P_noise ** 0.5, (steps, Nx))
-# target_strain_np[:, :Nx, 0, 0] += noise
+node_locs = ti.Vector.field(dim,
+                            dtype=real,
+                            shape=(max_steps, n_grid * n_grid))
+load_locs = ti.Vector.field(dim,
+                            dtype=real,
+                            shape=(max_steps))
+pin_locs = ti.Vector.field(dim,
+                            dtype=real,
+                            shape=(max_steps))
+roller_locs = ti.Vector.field(dim,
+                            dtype=real,
+                            shape=(max_steps))
 
 @ti.kernel
-def load_target(target_np: ti.types.ndarray()):
-    for i, j, k, l in ti.ndrange(steps, n_particles, dim, dim):
-        target_strain[i, j][k, l] = target_np[i, j, k, l]
+def assign_node_locs():
+    for s in range(max_steps):
+        load_locs[s] = [2*dx + velocity * s * dt, 15 * dx]
+        for i in range(n_grid):
+            for j in range(n_grid):
+                node_locs[s, i * n_grid + j] = [i * dx, j * dx]
+print('assigning node locs')
+assign_node_locs()
+gui = ti.GUI("Taichi Elements", (640, 640), background_color=0x112F41)
+out_dir = 'out_test'
 
-load_target(target_strain_np)
-
-
-init_g[None] = 0
-# force[None] = 5
-
-n_params = 3
-exp_params = ti.field(dtype=real, shape=(3), needs_grad=True)
-loc = ti.field(dtype=real, shape=(), needs_grad=True)
-std = ti.field(dtype=real, shape=(), needs_grad=True)
-height = ti.field(dtype=real, shape=(), needs_grad=True)
-
-losses = []
-
-print('running grad iterations')
-optim = 'lbfgs'
-if optim == 'lbfgs':
-    from scipy.optimize import minimize
-
-    n_ef_it = 1
-    E_hist = []
-    it_hist = []
-
-    def compute_loss_and_grad(params):
-        grid_v_in.fill(0)
-        grid_m_in.fill(0)
-        loss[None] = 0
-        
-        # loc[None] = params[0]
-        # std[None] = params[1]
-        # height[None] = params[2]
-
-        for i in range(3):
-            exp_params[i] = params[i]
-
-        with ti.ad.Tape(loss=loss):
-            assign_E()
-            assign_ext_load()
-            for s in range(steps - 1):
-                substep(s)
-            compute_loss()
-
-        loss_val = loss[None]
-        grad_val = [exp_params.grad[i] for i in range(3)]
-
-
-        return loss_val, grad_val
+frame = 0
+x_np = x.to_numpy()
+# node_locs_np = node_locs.to_numpy()
+# load_locs_np = load_locs.to_numpy()
+# for s in range(0, steps, 1):
+#     scale = 4
+#     gui.circles(x_np[s, :2*Nx], color=0x198C19, radius=1.5)
+#     gui.circles(x_np[s, [42,43,42+80,43+80]], color=0xFF0000, radius=1.5)
+#     gui.circles(x_np[s, 2*Nx:], color=0xFFA500, radius=1.5)
+#     # x_np_reshape = einops.rearrange(x_np[s], '(w x h y) c -> (h w) x y c', h=4, w=1, x=10, c=2)
+#     # gui.circles(x_np_reshape[[0,3]].reshape((-1, dim)), color=0x198C19, radius=1.5)
+#     # gui.circles(x_np_reshape[[1,2]].reshape((-1, dim)), color=0xFF4400, radius=1.5)
+#     # # gui.circles(x_np_reshape[[2]].reshape((-1, dim)), color=0xFDB100, radius=1.5)
+#     gui.circles(node_locs_np[s], color=0xFFFFFF, radius=1)
     
-    def callback_fn(intermediate_result):
-        params = intermediate_result
-        loss, grad = compute_loss_and_grad(params)
-        losses.append(loss)
-        print(j, 
-            'loss=', loss, 
-            '   grad=', grad,
-            '   params=', params)
-   
-    initial_params = [0.5, 0.05, 5000]
-
-    tol = 1e-3600
-    options = {
-        'disp': 1, 
-        'ftol': tol, 
-        'gtol': tol,
-        'tol': tol,
-        'verbose': 2,
-        'adaptive': True
-        }
-    result = minimize(compute_loss_and_grad,
-                      np.array(initial_params),
-                      method='L-BFGS-B',
-                      jac=True,
-                    # #   hess='2-point',
-                      bounds=((0, 1), (0, None), (0, None)),
-                      callback=callback_fn,
-                      options=options)
-    print(result)
-    
-    E_final = []
-    for i in range(n_particles):
-        E_final.append(E[i])
+#     # gui.circle(load_locs_np[s], color=0xFF0000, radius=10)
+#     gui.arrow(orig=load_locs_np[s], direction = [0, -dx], color=0xFF0000, radius=3)
+#     gui.triangle([2 * dx, 6 * dx], [1.5 * dx, 5.5 * dx], [2.5 * dx, 5.5 * dx], color=0x00FF00)
+#     gui.triangle([18 * dx, 6 * dx], [17.5 * dx, 5.5 * dx], [18.5 * dx, 5.5 * dx], color=0x00FF00)
+#     gui.show(f'{out_dir}/{frame:06d}.png')
+#     frame += 1
 
 
-    result_dict = {
-        "losses" : losses,
-        "E_final" : E_final,
-        "params" : result.x.tolist(),
-        "final_strain" : strain2.to_numpy(),
-        "final_x" : x.to_numpy()
-    }
-    filename = f"result_l_{initial_params[0]}_s_{initial_params[1]}_h_{initial_params[2]}_" + obs
-    if weighed_loss:
-        filename = filename + "_weighedloss"
-    if damaged:
-        filename = filename + "_damaged"
-    
-    with open(filename + ".json", "w") as outfile: 
-        json.dump(result_dict, outfile)
-
+np.save('x_true.npy', x_np)
+np.save('strain2_true.npy', strain2.to_numpy())
