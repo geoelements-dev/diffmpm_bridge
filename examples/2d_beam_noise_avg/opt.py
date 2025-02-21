@@ -286,7 +286,7 @@ target_strain = ti.Matrix.field(dim,
 
 
 # inject noise to eps_xx direction
-SNR_dB = 10
+SNR_dB = 0
 SNR_linear = 10 ** (SNR_dB / 10)
 # get avg signal power in eps_xx
 P_signal = np.mean(target_strain_np[:,:Nx,0,0]**2)
@@ -481,7 +481,8 @@ elif optim == 'lbfgs':
             '   params=', params)
         
     def callback_fn_e(intermediate_result):
-        params = intermediate_result.x
+        # print(intermediate_result)
+        params = intermediate_result
         loss, grad = compute_loss_and_grad_e(params)
         losses.append(loss)
         E1_hist.append(params[0])
@@ -503,7 +504,7 @@ elif optim == 'lbfgs':
             '   grad=', grad,
             '   params=', params)
 
-    init_e = 1e3
+    init_e = 1.5e4
     initial_params = [init_e, init_e, init_e, init_e, 5]
 
     E1_hist.append(initial_params[0])
@@ -579,7 +580,7 @@ elif optim == 'lbfgs':
         "it_hist": it_hist
     }
 
-    with open("result_db_10_init_1e3.json", "w") as outfile: 
+    with open("result_db_"+str(SNR_dB)+"_init_15e4.json", "w") as outfile: 
         json.dump(result_dict, outfile)
 
     plt.title("Optimization of Block Subject to Dynamic Rolling Force via $\epsilon (t)$")

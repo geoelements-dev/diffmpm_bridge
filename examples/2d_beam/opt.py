@@ -213,11 +213,16 @@ def g2p(f: ti.i32):
 @ti.kernel
 def compute_loss():
     for i in range(steps - 1):
-        for j in range(Nx):
+        for j in range(n_particles):
+        # for j in range(Nx):        
+        # for j in range(16):
             dist = (target_strain[i, j] - strain2[i, j]) ** 2
-            # dist = (1 / ((steps - 1) * n_particles)) * \
-            #     (target_strain[i, j] - strain2[i, j]) ** 2
-            loss[None] += 0.5 * (dist[0, 0])*1e16# + dist[1, 1]) * 1e16
+            # dist = (target_strain[i, j*5] - strain2[i, j*5]) ** 2
+            loss[None] += 0.5 * (dist[0, 0])*1e36# + dist[1, 1]) * 1e16
+            # dist = (target_strain[i, j] - strain2[i, j]) ** 2
+            # # dist = (1 / ((steps - 1) * n_particles)) * \
+            # #     (target_strain[i, j] - strain2[i, j]) ** 2
+            # loss[None] += 0.5 * (dist[0, 0])*1e16# + dist[1, 1]) * 1e16
 
 def substep(s):
     p2g(s)
@@ -492,7 +497,7 @@ elif optim == 'lbfgs':
             '   grad=', grad,
             '   params=', params)
 
-    init_e = 1e3
+    init_e = 1.3e4
     initial_params = [init_e, init_e, init_e, init_e, 5]
 
     E1_hist.append(initial_params[0])
@@ -568,7 +573,7 @@ elif optim == 'lbfgs':
         "it_hist": it_hist
     }
 
-    with open("result_1e3_row.json", "w") as outfile: 
+    with open("result_13e4_full.json", "w") as outfile: 
         json.dump(result_dict, outfile)
 
     plt.title("Optimization of Block Subject to Dynamic Rolling Force via $\epsilon (t)$")

@@ -283,7 +283,7 @@ def assign_node_locs():
                 node_locs[s, i * n_grid + j] = [i * dx, j * dx]
 print('assigning node locs')
 assign_node_locs()
-gui = ti.GUI("Taichi Elements", (640, 640), background_color=0x112F41)
+gui = ti.GUI("Taichi Elements", (640, 640), background_color=0xFFFFFF)
 out_dir = 'out_test'
 
 frame = 0
@@ -296,7 +296,7 @@ for s in range(0, steps, 1):
     x_np_reshape = einops.rearrange(x_np[s], '(w x h y) c -> (h w) x y c', h=4, w=2, x=20, c=2)
     gui.circles(x_np_reshape[[0,1,6,7]].reshape((-1, dim)), color=0x198C19, radius=1.5)
     gui.circles(x_np_reshape[[2,4]].reshape((-1, dim)), color=0xFF4400, radius=1.5)
-    gui.circles(x_np_reshape[[3,5]].reshape((-1, dim)), color=0xFDB100, radius=1.5)
+    gui.circles(x_np_reshape[[3,5]].reshape((-1, dim)), color=0x112F41, radius=1.5)
     gui.circles(node_locs_np[s], color=0xFFA500, radius=1)
     
     # gui.circle(load_locs_np[s], color=0xFF0000, radius=10)

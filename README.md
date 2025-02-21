@@ -36,3 +36,5 @@ To make a .gif of these files, you can run `python make_gif.py -i "path/to/png/f
 - `2d_beam_gaussian_dmg` : `2d_beam_damage_uniform` but optimization is done over a gaussian elastic field
 - `2d_beam_2d_gaussian_dmg` : `2d_beam_gaussian_dmg` but gaussian field is 2D
 - `2d_beam_gaussian_dmg_sym` : `2d_beam_gaussian_dmg` but beam damage is symmetric and load is static
+
+- `2d_beam_damage_complex` : 2d_beam experiment with damage id, distributed and localized damage

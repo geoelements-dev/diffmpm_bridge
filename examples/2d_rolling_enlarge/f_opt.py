@@ -2,6 +2,7 @@ import taichi as ti
 import numpy as np
 import matplotlib.pyplot as plt
 import json 
+import time
 
 ti.reset()
 real = ti.f32
@@ -204,11 +205,15 @@ def g2p(f: ti.i32):
 @ti.kernel
 def compute_loss():
     for i in range(steps - 1):
-        for j in range(Nx):
+        # dist = (target_strain[i, 40] - strain2[i, 40]) ** 2
+        # loss[None] += 0.5 * (dist[0, 0])# + dist[1, 1])
+        # dist = (target_strain[i, 41] - strain2[i, 41]) ** 2
+        # loss[None] += 0.5 * (dist[0, 0])# + dist[1, 1])
+        for j in range(n_particles):
             dist = (target_strain[i, j] - strain2[i, j]) ** 2
             # dist = (1 / ((steps - 1) * n_particles)) * \
             #     (target_strain[i, j] - strain2[i, j]) ** 2
-            loss[None] += 0.5 * (dist[0, 0] + dist[1, 1])
+            loss[None] += 0.5 * (dist[0, 0])# + dist[1, 1])
 
 def substep(s):
     p2g(s)
@@ -282,9 +287,10 @@ fs = []
 
 
 print('running grad iterations')
-optim = 'grad'
+optim = 'lbfgs'
+t0 = time.time()
 if optim == 'grad':
-
+    
     for j in range(grad_iterations):
         grid_v_in.fill(0)
         grid_m_in.fill(0)
@@ -320,28 +326,28 @@ if optim == 'grad':
             '   E=', E[None],
             '   F=', force[None])
 
-    plt.title("Optimization of Block Subject to Dynamic Rolling Force via $\epsilon (t)$")
-    plt.ylabel("Loss")
-    plt.xlabel("Gradient Descent Iterations")
-    plt.plot(losses)
-    plt.yscale('log')
-    plt.show()
+    # plt.title("Optimization of Block Subject to Dynamic Rolling Force via $\epsilon (t)$")
+    # plt.ylabel("Loss")
+    # plt.xlabel("Gradient Descent Iterations")
+    # plt.plot(losses)
+    # plt.yscale('log')
+    # plt.show()
 
-    plt.title("Force Learning Curve")
-    plt.ylabel("$F$")
-    plt.xlabel("Iterations")
-    plt.hlines(5e4, 0, grad_iterations, color='r', label='True Value')
-    plt.plot(fs, color='b', label='Estimated Value')
-    plt.legend()
-    plt.show()
+    # plt.title("Force Learning Curve")
+    # plt.ylabel("$F$")
+    # plt.xlabel("Iterations")
+    # plt.hlines(5e4, 0, grad_iterations, color='r', label='True Value')
+    # plt.plot(fs, color='b', label='Estimated Value')
+    # plt.legend()
+    # plt.show()
 
-    plt.title("Young's Modulus Learning Curve")
-    plt.ylabel("$E$")
-    plt.xlabel("Iterations")
-    plt.hlines(1e4, 0, grad_iterations, color='r', label='True Value')
-    plt.plot(es, color='b', label='Estimated Value')
-    plt.legend()
-    plt.show()
+    # plt.title("Young's Modulus Learning Curve")
+    # plt.ylabel("$E$")
+    # plt.xlabel("Iterations")
+    # plt.hlines(1e4, 0, grad_iterations, color='r', label='True Value')
+    # plt.plot(es, color='b', label='Estimated Value')
+    # plt.legend()
+    # plt.show()
 
 
 elif optim == 'lbfgs':
@@ -365,7 +371,7 @@ elif optim == 'lbfgs':
         return loss_val, grad_val
     
     def callback_fn(intermediate_result):
-        params = intermediate_result.x
+        params = intermediate_result
         loss, grad = compute_loss_and_grad(params)
         losses.append(loss)
         es.append(params[0])
@@ -404,34 +410,38 @@ elif optim == 'lbfgs':
 
     es.insert(0, initial_params[0])
 
-    plt.title("Optimization of Block Subject to Dynamic Rolling Force via $\epsilon (t)$")
-    plt.ylabel("Loss")
-    plt.xlabel("LBFGS-B Iterations")
-    plt.plot(losses)
-    plt.yscale('log')
-    plt.show()
+    # plt.title("Optimization of Block Subject to Dynamic Rolling Force via $\epsilon (t)$")
+    # plt.ylabel("Loss")
+    # plt.xlabel("LBFGS-B Iterations")
+    # plt.plot(losses)
+    # plt.yscale('log')
+    # plt.show()
 
-    plt.title("Force Learning Curve")
-    plt.ylabel("$F$")
-    plt.xlabel("Iterations")
-    plt.hlines(5e4, 0, result.nit - 1, color='r', label='True Value')
-    plt.plot(fs, color='b', label='Estimated Value')
-    plt.legend()
-    plt.show()
+    # plt.title("Force Learning Curve")
+    # plt.ylabel("$F$")
+    # plt.xlabel("Iterations")
+    # plt.hlines(5e4, 0, result.nit - 1, color='r', label='True Value')
+    # plt.plot(fs, color='b', label='Estimated Value')
+    # plt.legend()
+    # plt.show()
 
-    plt.title("Young's Modulus Learning Curve")
-    plt.ylabel("$E$")
-    plt.xlabel("Iterations")
-    plt.hlines(1e4, 0, result.nit - 1, color='r', label='True Value')
-    plt.plot(es, color='b', label='Estimated Value')
-    plt.legend()
-    plt.show()
+    # plt.title("Young's Modulus Learning Curve")
+    # plt.ylabel("$E$")
+    # plt.xlabel("Iterations")
+    # plt.hlines(1e4, 0, result.nit - 1, color='r', label='True Value')
+    # plt.plot(es, color='b', label='Estimated Value')
+    # plt.legend()
+    # plt.show()
 
+t1 = time.time()
 result_dict = {
     "losses" : losses,
     "fs" : fs,
     "es" : es
 }
+t_opt = t1-t0
+print(t_opt)
+np.save("t_full_"+optim+".npy", t_opt)
 
-with open("result_bot_grad.json", "w") as outfile: 
-    json.dump(result_dict, outfile)
+# with open("result_bot_grad.json", "w") as outfile: 
+#     json.dump(result_dict, outfile)
