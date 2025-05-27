@@ -3,52 +3,30 @@ import numpy as np
 import matplotlib.pyplot as plt
 import json 
 
-import argparse
-
-obs_choices = ["full", "sensor"]
-cases = ['d', 'dm', 'g', 'gm', 'h', 'v', 'vm', 'gt', 'gtm', 'ht']
-n_search_list = [10]
-
-obs = obs_choices[0]
-case = cases[1]
-n_search = n_search_list[0]
-
-# # Parse command-line arguments
-# parser = argparse.ArgumentParser(description="Run additive optimization.")
-# parser.add_argument("obs", type=str, choices=["full", "sensor"], help="Observation choice")
-# parser.add_argument("case", type=str, help="Case identifier")
-# parser.add_argument("n_search", type=int, help="Number of search iterations")
-# args = parser.parse_args()
-
-# # Extract arguments
-# obs = args.obs
-# case = args.case
-# n_search = args.n_search
-
-
-
 ti.reset()
 real = ti.f32
-ti.init(arch=ti.gpu, default_fp=real, device_memory_GB=4, advanced_optimization=True, debug=True)
+ti.init(arch=ti.cuda, default_fp=real, device_memory_GB=4, debug=True)
 
 # init parameters
-size = 1
+size = 50
+span = 30
+depth = 2
 dim = 2
-Nx = 80  # reduce to 30 if run out of GPU memory
-Ny = 10
+Nx = 180  # reduce to 30 if run out of GPU memory
+Ny = 12
 n_particles = Nx * Ny
-n_grid = 20
-dx = 1 / n_grid
+n_grid = 25
+dx = size / n_grid
 inv_dx = 1 / dx
 dt = 1e-4
-p_mass = 1
-p_vol = 1
-nu = 0.2
+p_vol = (span / Nx) * (depth / Ny)
+assert (span / Nx) == (depth / Ny)
+p_mass = 0.15 * p_vol # 0.15 klb/ft3 2400 kg/m3
+nu = 0.3
 
 max_steps = 1024
 steps = max_steps
 gravity = 0
-
 
 x = ti.Vector.field(dim,
                     dtype=real,
@@ -83,11 +61,6 @@ F = ti.Matrix.field(dim,
                     dtype=real,
                     shape=(max_steps, n_particles),
                     needs_grad=True)
-# strain = ti.Matrix.field(dim,
-#                          dim,
-#                          dtype=real,
-#                          shape=(max_steps, n_particles),
-#                          needs_grad=True)
 strain2 = ti.Matrix.field(dim,
                          dim,
                          dtype=real,
@@ -113,7 +86,6 @@ def p2g(f: ti.i32):
                  ti.Matrix.diag(2, E[p] * nu / ((1 + nu) * (1 - 2 * nu)) * (J - 1) * J)
         stress = -(dt * p_vol * 4 * inv_dx * inv_dx) * cauchy
         affine = stress + p_mass * C[f, p]
-        # strain[f, p] += 0.5 * (new_F.transpose() @ new_F - ti.math.eye(dim))
         for i in ti.static(range(3)):
             for j in ti.static(range(3)):
                 offset = ti.Vector([i, j])
@@ -128,31 +100,14 @@ def grid_op(f: ti.i32):
     for i, j in ti.ndrange(n_grid, n_grid):     
         inv_m = 1 / (grid_m_in[f, i, j] + 1e-10) 
         v_out = inv_m * grid_v_in[f, i, j] + dt * f_ext[f, i, j]
-        if i == 2 and j == 6:
+        if i == 5 and j == 7:
             v_out[0] = 0
             v_out[1] = 0
-        if i == 1 and j == 6:
-            v_out[0] = 0
-            v_out[1] = 0
-        if i == 2 and j == 5:
-            v_out[0] = 0
-            v_out[1] = 0
-        if i == 1 and j == 5:
-            v_out[0] = 0
-            v_out[1] = 0
-        if i == 18 and j == 6:
-            v_out[0] = 0
-            v_out[1] = 0
-        if i == 19 and j == 6:
-            v_out[0] = 0
-            v_out[1] = 0
-        if i == 18 and j == 5:
-            v_out[0] = 0
-            v_out[1] = 0
-        if i == 19 and j == 5:
-            v_out[0] = 0
+        if i == 20 and j == 7:
             v_out[1] = 0
         grid_v_out[f, i, j] = v_out
+
+
 
 @ti.kernel
 def g2p(f: ti.i32):
@@ -179,6 +134,7 @@ def g2p(f: ti.i32):
                         [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], 
                         [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]])
         strain_rate = ti.Vector([0.0, 0.0, 0.0])
+
 
         fx = fx * dx 
         grad[0, 0] = 0.25 * fx[1] * (fx[1] - 1.) * (2 * fx[0] - 1.)
@@ -225,6 +181,7 @@ def g2p(f: ti.i32):
             strain_rate[1] += grad[k, 1] * vi[k, 1]
             strain_rate[2] += grad[k, 0] * vi[k, 1] + grad[k, 1] * vi[k, 0]
 
+
         dstrain = strain_rate * dt
         strain2[f + 1, p][0, 0] = strain2[f, p][0, 0] + dstrain[0]
         strain2[f + 1, p][1, 1] = strain2[f, p][1, 1] + dstrain[1]
@@ -234,6 +191,7 @@ def g2p(f: ti.i32):
         v[f + 1, p] = new_v
         x[f + 1, p] = x[f, p] + dt * v[f + 1, p]
         C[f + 1, p] = new_C
+
 
 
 @ti.kernel
@@ -252,14 +210,12 @@ def compute_loss():
                 dist = (target_strain[i, j*5] - strain2[i, j*5]) ** 2
                 loss[None] += 0.5 * (dist[0, 0])*1e36# + dist[1, 1]) * 1e16
 
-@ti.kernel
-def loss_weight(i: ti.i32) -> ti.f32:
-    return ti.math.pow(i - 40, 2.0) + 1
-
 def substep(s):
     p2g(s)
     grid_op(s)
     g2p(s)
+
+
 
 f_ext_scale = 5
 velocity = 100 #16 / 20 / 0.1
@@ -270,58 +226,58 @@ t_steps_n = np.array([t_steps - time for time in time_to_center])
 t_steps_n = np.stack(t_steps_n, axis=1)
 
 t = np.asarray(t_steps_n)
-fc, bw, bwr = 100, 0.5, -6
+fc, bw, bwr = 10, 0.5, -6
 ref = np.power(10.0, bwr / 20.0)
 a = -(np.pi * fc * bw) ** 2 / (4.0 * np.log(ref))
 e_np = np.exp(-a * t * t)
-e = ti.field(ti.f32, (1024, 17))
+e = ti.field(ti.f32, (steps, 17))
 e.from_numpy(e_np)
 
 @ti.kernel
 def assign_ext_load():
-    for t, node in ti.ndrange(max_steps, (2, 19)):
-            f_ext[t, node, 8] = [0, -5* e[t, node - 2]]
+    for t, node in ti.ndrange(max_steps, (5, 21)):
+            f_ext[t, node, 10] = [0, -f_ext_scale* e[t, node - 5]]
+
+
+@ti.kernel
+def assign_E():
+    for i in range(n_particles):
+        col = i % Nx
+        if col < Nx*1/4 :
+            E[i] = E1[None]
+        elif col >= Nx*3/4:
+            E[i] = E4[None]
+        elif col >= Nx*1/4 and col < Nx*1/2:
+            E[i] = E2[None]
+        else:
+            E[i] = E3[None]
+
+
+
 
 for i in range(n_particles):
     F[0, i] = [[1, 0], [0, 1]]
 
+
+
 for i in range(Nx):
     for j in range(Ny):
-        x[0, j * Nx + i] = [(i)/(Nx) * 0.8 + 0.1, (j)/(Ny) * 0.1 + 0.3]
+        x[0, j * Nx + i] = [
+            (i)/(Nx) * 30 + 10 + 30/Nx * 0.5, 
+            (j)/(Ny) * 6 + 14 + 6/Ny * 0.5
+            ]
+
+
+
 
 print('loading target')
-obs_choices = ["full", "row", "sensor"]
-cases = ['', 'd', 'dm', 'g', 'gm', 'h', 'v', 'vm', 'gt', 'gtm' , 'ht']
 
-# obs = obs_choices[2]
-# case = 'dm'
-# n_search = 10
-
-if case == '':
-    target_strain_name = "strain2_true.npy"
-else:
-    target_strain_name = "strain2_true_"+ case + ".npy"
-target_strain_np = np.load(target_strain_name)
+target_strain_np = np.load('s_c.npy')
 target_strain = ti.Matrix.field(dim,
                             dim,
                            dtype=real,
                            shape=(max_steps, n_particles),
                            needs_grad=True)
-target_x_np = np.load('x_true.npy')
-target_x = ti.Vector.field(dim,
-                           dtype=real,
-                           shape=(max_steps, n_particles),
-                           needs_grad=True)
-
-# inject noise to eps_xx direction
-SNR_dB = 1000
-SNR_linear = 10 ** (SNR_dB / 10)
-# get avg signal power in eps_xx
-P_signal = np.mean(target_strain_np[:,:Nx,0,0]**2)
-P_noise = P_signal / SNR_linear
-# particle-wise noise
-noise = np.random.normal(0, P_noise ** 0.5, (steps, Nx))
-# target_strain_np[:, :Nx, 0, 0] += noise
 
 @ti.kernel
 def load_target(target_np: ti.types.ndarray()):
@@ -330,209 +286,274 @@ def load_target(target_np: ti.types.ndarray()):
 
 load_target(target_strain_np)
 
+
+# ADAM parameters
+lr = 1e1
+beta1 = 0.9
+beta2 = 0.999
+epsilon = 1e-8
+n_params = 5
+m_adam = [0 for _ in range(n_params)]
+v_adam = [0 for _ in range(n_params)]
+v_hat = [0 for _ in range(n_params)]
+
 init_g[None] = 0
+force[None] = 5
+
+E_params = ti.field(dtype=real, shape=(3), needs_grad=True)
+E1 = ti.field(dtype=real, shape=(), needs_grad=True)
+E2 = ti.field(dtype=real, shape=(), needs_grad=True)
+E3 = ti.field(dtype=real, shape=(), needs_grad=True)
+E4 = ti.field(dtype=real, shape=(), needs_grad=True)
+
+E1[None] = 1e4
+E2[None] = 1e4
+E3[None] = 1e4
+E4[None] = 1e4
+
+grad_iterations = 1000
+
+losses = []
+param_hist = np.zeros((n_params, grad_iterations))
+param_labels = ['E1', 'E2', 'E3', 'E4', 'F']
+param_true = [1.1e4, 0.9e4, 0.9e4, 1.1e4, 5]
 
 
 print('running grad iterations')
+optim = 'lbfgs'
+if optim == 'grad':
+    for j in range(grad_iterations):
+        grid_v_in.fill(0)
+        grid_m_in.fill(0)
+        loss[None] = 0
+        with ti.ad.Tape(loss=loss):
+            assign_E()
+            assign_ext_load()
+            for s in range(steps - 1):
+                substep(s)
+            compute_loss()
 
-from scipy.optimize import minimize
 
-losses = []
-E_hist = []
+        l = loss[None]
+        losses.append(l)
 
+        params = [E1, E2, E3, E4, force]
+        param_vals = [E1[None], E2[None], E3[None], E4[None], force[None]]
+        for i in range(n_params):
+            gradient = params[i].grad[None]
+            m_adam[i] = beta1 * m_adam[i] + (1 - beta1) * gradient
+            v_adam[i] = beta2 * v_adam[i] + (1 - beta2) * gradient**2
+            # m_hat = m_adam[i] / (1 - beta1**(j + 1))
+            # v_hat = v_adam[i] / (1 - beta2**(j + 1))
+            v_hat[i] = ti.max(v_hat[i], v_adam[i])
+            param_vals[i] -= lr * m_adam[i] / (ti.sqrt(v_hat[i]) + epsilon)
 
+        param_hist[:, j] = param_vals
 
-@ti.kernel
-def assign_E_modular():
-    for i in range(n_targets):
-        E[target_indices[i]] = target_values[i]
+        print(j, 
+            'loss=', l, 
+            '   grad=', [i.grad[None] for i in params],
+            '   params=', param_vals)
+    plt.figure(figsize=(11,4))
+    plt.title("Optimization of Block Subject to Dynamic Rolling Force via $\epsilon (t)$")
+    plt.ylabel("Loss")
+    plt.xlabel("Gradient Descent Iterations")
+    plt.ticklabel_format(axis='y', style='sci', scilimits=(0,0))
+    plt.plot(losses)
+    plt.yscale('log')
     
-    for i in range(n_locked):
-        E[locked_indices[i]] = locked_values[i]
+    plt.savefig("grad loss.png")
+    plt.show()
+    
 
-def compute_loss_and_grad_modular(params):
-    grid_v_in.fill(0)
-    grid_m_in.fill(0)
-    loss[None] = 0
-    for i in range(n_targets):
-        target_values[i] = params[i]
-    with ti.ad.Tape(loss=loss):
-        assign_E_modular()
-        assign_ext_load()
-        for s in range(steps - 1):
-            substep(s)
-        compute_loss()
-
-    loss_val = loss[None]
-    grad_val = [target_values.grad[i] for i in range(n_targets)]
-
-    # losses.append(loss_val)
-    # E_hist.append(params.tolist())
-    # print(z, 
-        # 'loss=', loss, 
-        # '   grad=', grad_val,
-        # '   params=', params,
-        # 'E: ', E.to_numpy()[locked_indices.to_numpy()[:n_locked]],
-        # E[0],
-        # )
-    return loss_val, grad_val
-
-init_e = 1e4
-
-tol = 1e-36
-options = {
-    # 'disp': 1,
-    'disp': 0, 
-    'ftol': tol, 
-    'gtol': tol,
+    for i in range(n_params):
+        plt.figure(figsize=(6,4))
+        plt.title(param_labels[i] + " Learning Curve")
+        plt.ylabel(param_labels[i])
+        plt.xlabel("Iterations")
+        plt.hlines(param_true[i], 0, grad_iterations - 1, color='r', label='True Value')
+        plt.plot(param_hist[i], color='b', label='Estimated Value')
+        plt.legend()
+        plt.savefig("grad param"+str(i)+".png")
+        plt.show()
+        
+    result_dict = {
+        "losses" : losses,
+        "param_hist" : param_hist.tolist()
     }
-converged_threshold = 100
 
-# n_search = 5
+    with open("result_full_grad.json", "w") as outfile: 
+        json.dump(result_dict, outfile)
 
-target_indices = ti.field(dtype=int, shape=(n_particles))
-target_values = ti.field(dtype=real, shape=(n_particles), needs_grad=True)
+elif optim == 'lbfgs':
+    from scipy.optimize import minimize
 
-locked_indices = ti.field(dtype=int, shape=(n_particles))
-locked_values = ti.field(dtype=real, shape=(n_particles))
+    n_ef_it = 1
+    E1_hist, E2_hist, E3_hist, E4_hist, F_hist = [], [], [], [], []
+    it_hist = []
 
-E_hist = []
+    def compute_loss_and_grad(params):
+        grid_v_in.fill(0)
+        grid_m_in.fill(0)
+        loss[None] = 0
+        E1[None] = params[0]
+        E2[None] = params[1]
+        E3[None] = params[2]
+        E4[None] = params[3]
+        force[None] = params[4]
+        with ti.ad.Tape(loss=loss):
+            assign_E()
+            assign_ext_load()
+            for s in range(steps - 1):
+                substep(s)
+            compute_loss()
 
-for z in range(n_search):
-    print("searching: " + str(z))
-    n_targets = n_particles - z
-    n_locked = z
+        loss_val = loss[None]
+        grad_val = [E1.grad[None], E2.grad[None],E3.grad[None],E4.grad[None], force.grad[None]]
 
-    target_indices_np = np.arange(n_particles)
-    target_indices_np = np.delete(target_indices_np, locked_indices.to_numpy()[:n_locked])
-    target_indices_np = np.concatenate((target_indices_np, np.zeros(n_locked)))
-    if target_indices_np.shape[0] == n_particles+1:
-        target_indices_np = target_indices_np[:-1]
-    target_indices.from_numpy(target_indices_np)
-    # target_values.fill(init_e)
-
-    params = np.zeros(n_targets) + init_e
-
-    # run naive
-    baseline = np.zeros(n_targets) + init_e
-    deviation = 0
-
-    converge_counter = 0
-    while deviation < converged_threshold:
-        # print("converge counter: ", converge_counter)
-        result = minimize(compute_loss_and_grad_modular,
-                    params,
-                    method='L-BFGS-B',
-                    jac=True,
-                    options=options)
-        # find highest deviation particle
-        E_search = np.array(result.x)
-        # E_search = np.delete(E_search, locked_indices.to_numpy()[:n_locked])
-        deviation = max(E_search - baseline)
-
-        converge_counter += 1
+        return loss_val, grad_val
     
+    def compute_loss_and_grad_e(params):
+        print("t1: ", params)
+        grid_v_in.fill(0)
+        grid_m_in.fill(0)
+        loss[None] = 0
+        E1[None] = params[0]
+        E2[None] = params[1]
+        E3[None] = params[2]
+        E4[None] = params[3]
+        with ti.ad.Tape(loss=loss):
+            assign_E()
+            assign_ext_load()
+            for s in range(steps - 1):
+                substep(s)
+            compute_loss()
 
-    minus_baseline = np.abs(E_search - init_e)
-    damage_index = np.where(minus_baseline == max(minus_baseline))[0]
-    # lock particle
-    curr_locked = locked_indices.to_numpy()[:n_locked]
-    locked_indices[z] = damage_index + np.sum(curr_locked <= damage_index)
-    locked_values[z] = E_search[damage_index]
-    print('found: ', locked_values[z], " at ", locked_indices[z])
-    # append result
-    E_hist.append(E.to_numpy().tolist())
+        loss_val = loss[None]
+        grad_val = [E1.grad[None], E2.grad[None], E3.grad[None], E4.grad[None]]
+        return loss_val, grad_val
+    
+    def compute_loss_and_grad_f(params):
+        grid_v_in.fill(0)
+        grid_m_in.fill(0)
+        loss[None] = 0
+        force[None] = params[0]
+        with ti.ad.Tape(loss=loss):
+            assign_E()
+            assign_ext_load()
+            for s in range(steps - 1):
+                substep(s)
+            compute_loss()
+
+        loss_val = loss[None]
+        grad_val = [force.grad[None]]
+
+        return loss_val, grad_val
+    
+    def callback_fn(intermediate_result):
+        params = intermediate_result.x
+        loss, grad = compute_loss_and_grad(params)
+        losses.append(loss)
+        E1_hist.append(params[0])
+        E2_hist.append(params[1])
+        E3_hist.append(params[2])
+        E4_hist.append(params[3])
+        F_hist.append(params[4])
+        print(j, 
+            'loss=', loss, 
+            '   grad=', grad,
+            '   params=', params)
+        
+    def callback_fn_e(intermediate_result):
+        params = intermediate_result
+        loss, grad = compute_loss_and_grad_e(params)
+        losses.append(loss)
+        E1_hist.append(params[0])
+        E2_hist.append(params[1])
+        E3_hist.append(params[2])
+        E4_hist.append(params[3])
+        print(j, 
+            'loss=', loss, 
+            '   grad=', grad,
+            '   params=', params)
+        
+    def callback_fn_f(intermediate_result):
+        params = intermediate_result
+        loss, grad = compute_loss_and_grad_f(params)
+        losses.append(loss)
+        F_hist.append(params[0])
+        print(j, 
+            'loss=', loss, 
+            '   grad=', grad,
+            '   params=', params)
+
+    init_e = 4e3
+    initial_params = [init_e, init_e, init_e, init_e, 0]
+    params = initial_params
+    obs_choices = ["full", "row", "sensor"]
+    obs = obs_choices[2]
+
+    E1_hist.append(initial_params[0])
+    E2_hist.append(initial_params[1])
+    E3_hist.append(initial_params[2])
+    E4_hist.append(initial_params[3])
+    F_hist.append(initial_params[4])
+
+    tol = 1e-3600
+    options = {
+        'disp': 1, 
+        'xatol': tol, 
+        'fatol': tol, 
+        'xtol': tol, 
+        'ftol': tol, 
+        'gtol': tol,
+        'tol': tol,
+        'catol': tol,
+        'barrier_tol': tol,
+        'maxCGit': 1000,
+        'maxfun': 1000, 
+        'maxiter': 1000,
+        'verbose': 2,
+        'adaptive': True
+        }
+
+    for i in range(n_ef_it):
+        print("E opt ", i)
+        result = minimize(compute_loss_and_grad_e, 
+                        initial_params[:4], 
+                        method='L-BFGS-B', 
+                        jac=True, 
+                        hess='2-point',
+                        # bounds=[(1e2, 1e6), (1e2, 1e6), (1e2, 1e6), (1e2, 1e6)],
+                        callback=callback_fn_e,
+                        options=options)
+        initial_params[:4] = result.x
+        it_hist.append(result.nit)
+        print(result)
+        
+        # print("F opt ", i)
+        # result = minimize(compute_loss_and_grad_f, 
+        #                 initial_params[-1], 
+        #                 method='L-BFGS-B', 
+        #                 jac=True, 
+        #                 hess='2-point',
+        #                 callback=callback_fn_f,
+        #                 options=options)
+        # it_hist.append(result.nit)
+        # initial_params[-1] = result.x
+
+        # print(result)
 
 
-locked_indices_arr = locked_indices.to_numpy()[:n_search]
-locked_values_arr = locked_values.to_numpy()[:n_search]
+    result_dict = {
+        "losses" : losses,
+        "E1" : E1_hist,
+        "E2" : E2_hist,
+        "E3" : E3_hist,
+        "E4" : E4_hist,
+        "F" : F_hist,
+        "it_hist": it_hist
+    }
 
-# print(E_hist)
-print("phase 1 results:")
-print(locked_indices_arr)
-print(locked_values_arr)
-
-result_dict = {
-    "E_hist" : E_hist,
-    "locked_indices" : locked_indices_arr.tolist(),
-    "locked_values" : locked_values_arr.tolist()
-}
-
-filename = f"result_add_{case}_{obs}_{n_search}_p1"
-with open(filename + ".json", "w") as outfile: 
-    json.dump(result_dict, outfile)
-
-name = f"result_add_{case}_{obs}_{n_search}_p1"
-with open(name + '.json') as json_file:
-        jf = json.load(json_file)
-
-locked_indices_arr = np.array(jf["locked_indices"])  
-
-# reoptimize locked values
-print('Phase 2')
-n_targets = n_search
-n_locked = n_particles - n_targets
-
-target_indices_np = np.concatenate((locked_indices_arr, np.zeros(n_locked)))
-target_indices.from_numpy(target_indices_np)
-
-params = np.zeros(n_targets) + init_e
-
-
-@ti.kernel
-def assign_E_modular_p2():
-    E.fill(init_e)
-    for i in range(n_targets):
-        E[target_indices[i]] = target_values[i]
-
-def compute_loss_and_grad_modular_p2(params):
-    grid_v_in.fill(0)
-    grid_m_in.fill(0)
-    loss[None] = 0
-    for i in range(n_targets):
-        target_values[i] = params[i]
-    with ti.ad.Tape(loss=loss):
-        assign_E_modular_p2()
-        assign_ext_load()
-        for s in range(steps - 1):
-            substep(s)
-        compute_loss()
-
-    loss_val = loss[None]
-    grad_val = [target_values.grad[i] for i in range(n_targets)]
-
-    return loss_val, grad_val
-
-deviation = 0
-converge_counter = 0
-baseline = np.zeros(n_targets) + init_e
-init_e_p2 = 100
-params = np.zeros(n_targets) + init_e_p2
-while deviation < converged_threshold:
-    print("converge counter: ", converge_counter)
-    result = minimize(compute_loss_and_grad_modular_p2,
-                params,
-                method='L-BFGS-B',
-                jac=True,
-                options=options)
-    # find highest deviation particle
-    E_search = np.array(result.x)
-    deviation = max(E_search - baseline)
-
-    converge_counter += 1
-E_hist.append(E.to_numpy().tolist())
-
-print("final: ", result.x)
-print("found:")
-print(locked_indices_arr)
-
-result_dict = {
-    "E_hist" : E_hist,
-    "locked_indices" : locked_indices_arr.tolist(),
-    "locked_values" : locked_values_arr.tolist()
-}
-
-filename = f"result_add_{case}_{obs}_{n_search}_p2"
-with open(filename + ".json", "w") as outfile: 
-    json.dump(result_dict, outfile)
-
+    # with open(f"result_{init_e}_{obs}.json", "w") as outfile: 
+    #     json.dump(result_dict, outfile)

@@ -3,6 +3,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import json 
 
+import time
+t1 = time.time()
+
 ti.reset()
 real = ti.f32
 ti.init(arch=ti.cuda, default_fp=real, device_memory_GB=12)
@@ -237,7 +240,7 @@ def compute_loss():
             dist = (target_strain[i, j] - strain2[i, j]) ** 2
             # dist = (1 / ((steps - 1) * n_particles)) * \
             #     (target_strain[i, j] - strain2[i, j]) ** 2
-            loss[None] += 0.5 * (dist[0, 0])*1e16# + dist[1, 1]) * 1e16
+            loss[None] += 0.5 * (dist[0, 0])#*1e16# + dist[1, 1]) * 1e16
 
 def substep(s):
     p2g(s)
@@ -420,7 +423,7 @@ if optim == 'grad':
 
 elif optim == 'lbfgs':
     from scipy.optimize import minimize
-
+    grad_tracker =[]
     n_ef_it = 1
     E_hist = []
     it_hist = []
@@ -486,10 +489,12 @@ elif optim == 'lbfgs':
         loss, grad = compute_loss_and_grad(params)
         losses.append(loss)
         E_hist.append(params.tolist())
-        print(j, 
-            'loss=', loss, 
-            # '   grad=', grad,
-            '   params=', params)
+        grad_tracker.append(np.sqrt(min(np.array(grad)**2)))
+        grad_tracker.append(np.sqrt(max(np.array(grad)**2)))
+        # print(j, 
+        #     'loss=', loss, 
+        #     # '   grad=', grad,
+        #     '   params=', params)
         
     # def callback_fn_e(intermediate_result):
     #     params = intermediate_result.x
@@ -515,7 +520,7 @@ elif optim == 'lbfgs':
     #         '   params=', params)
 
     # E_block.fill(1e4)
-    init_e = 11e3
+    init_e = 5e3
     initial_params = []
     for i in range(n_blocks):
         initial_params.append(init_e)
@@ -538,6 +543,7 @@ elif optim == 'lbfgs':
         'verbose': 2,
         'adaptive': True
         }
+    
     result = minimize(compute_loss_and_grad,
                       np.array(initial_params),
                       method='L-BFGS-B',
@@ -545,8 +551,11 @@ elif optim == 'lbfgs':
                     #   hess='2-point',
                       callback=callback_fn,
                       options=options)
+    t2 = time.time()
     print(result)
-    
+    print(t2-t1)
+    grad_tracker = np.array(grad_tracker)
+    print(grad_tracker.min(), grad_tracker.max())
     # for i in range(n_ef_it):
     #     print("E opt ", i)
     #     result = minimize(compute_loss_and_grad_e, 
@@ -582,8 +591,8 @@ elif optim == 'lbfgs':
         "E_hist" : E_hist
     }
 
-    with open(f"result_{n_blocks_x}_{n_blocks_y}_init_10e3_full_reverse.json", "w") as outfile: 
-        json.dump(result_dict, outfile)
+    # with open(f"result_{n_blocks_x}_{n_blocks_y}_init_10e3_full_reverse.json", "w") as outfile: 
+    #     json.dump(result_dict, outfile)
 
     # plt.title("Optimization of Block Subject to Dynamic Rolling Force via $\epsilon (t)$")
     # plt.ylabel("Loss")

@@ -207,13 +207,18 @@ def compute_loss():
     for i in range(steps - 1):
         # dist = (target_strain[i, 40] - strain2[i, 40]) ** 2
         # loss[None] += 0.5 * (dist[0, 0])# + dist[1, 1])
-        # dist = (target_strain[i, 41] - strain2[i, 41]) ** 2
+        # dist = (target_strain[i, 40] - strain2[i, 40]) ** 2
         # loss[None] += 0.5 * (dist[0, 0])# + dist[1, 1])
-        for j in range(n_particles):
-            dist = (target_strain[i, j] - strain2[i, j]) ** 2
-            # dist = (1 / ((steps - 1) * n_particles)) * \
-            #     (target_strain[i, j] - strain2[i, j]) ** 2
-            loss[None] += 0.5 * (dist[0, 0])# + dist[1, 1])
+
+        dist = (target_strain[i, 20] - strain2[i, 20]) ** 2
+        loss[None] += 0.5 * (dist[0, 0])# + dist[1, 1])
+        dist = (target_strain[i, 60] - strain2[i, 60]) ** 2
+        loss[None] += 0.5 * (dist[0, 0])# + dist[1, 1])
+        # for j in range(n_particles):
+        #     dist = (target_strain[i, j] - strain2[i, j]) ** 2
+        #     # dist = (1 / ((steps - 1) * n_particles)) * \
+        #     #     (target_strain[i, j] - strain2[i, j]) ** 2
+        #     loss[None] += 0.5 * (dist[0, 0])# + dist[1, 1])
 
 def substep(s):
     p2g(s)
@@ -287,7 +292,7 @@ fs = []
 
 
 print('running grad iterations')
-optim = 'lbfgs'
+optim = 'grad'
 t0 = time.time()
 if optim == 'grad':
     
@@ -441,7 +446,7 @@ result_dict = {
 }
 t_opt = t1-t0
 print(t_opt)
-np.save("t_full_"+optim+".npy", t_opt)
+np.save("t_1_"+optim+".npy", t_opt)
 
-# with open("result_bot_grad.json", "w") as outfile: 
-#     json.dump(result_dict, outfile)
+with open(f"result_2_x_{optim}_t.json", "w") as outfile: 
+    json.dump(result_dict, outfile)

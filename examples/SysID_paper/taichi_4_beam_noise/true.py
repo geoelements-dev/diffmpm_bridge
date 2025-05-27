@@ -1,7 +1,5 @@
 import taichi as ti
 import numpy as np
-import matplotlib.pyplot as plt
-import json, einops
 
 ti.reset()
 real = ti.f32
@@ -10,15 +8,15 @@ ti.init(arch=ti.cuda, default_fp=real, device_memory_GB=12)
 # init parameters
 size = 1
 dim = 2
-Nx = 128
-Ny = 16
+Nx = 80 
+Ny = 10
 n_particles = Nx * Ny
 n_grid = 20
 dx = 1 / n_grid
 inv_dx = 1 / dx
 dt = 1e-4
 p_mass = 1
-p_vol = 1
+p_vol = 1.1
 nu = 0.2
 
 max_steps = 1024
@@ -101,26 +99,7 @@ def grid_op(f: ti.i32):
         if i == 2 and j == 6:
             v_out[0] = 0
             v_out[1] = 0
-        if i == 1 and j == 6:
-            v_out[0] = 0
-            v_out[1] = 0
-        if i == 2 and j == 5:
-            v_out[0] = 0
-            v_out[1] = 0
-        if i == 1 and j == 5:
-            v_out[0] = 0
-            v_out[1] = 0
         if i == 18 and j == 6:
-            v_out[0] = 0
-            v_out[1] = 0
-        if i == 19 and j == 6:
-            v_out[0] = 0
-            v_out[1] = 0
-        if i == 18 and j == 5:
-            v_out[0] = 0
-            v_out[1] = 0
-        if i == 19 and j == 5:
-            v_out[0] = 0
             v_out[1] = 0
         grid_v_out[f, i, j] = v_out
 
@@ -210,13 +189,12 @@ def g2p(f: ti.i32):
         C[f + 1, p] = new_C
 
 
+
 @ti.kernel
 def compute_loss():
     for i in range(steps - 1):
         for j in range(n_particles):
             dist = (target_strain[i, j] - strain2[i, j]) ** 2
-            # dist = (1 / ((steps - 1) * n_particles)) * \
-            #     (target_strain[i, j] - strain2[i, j]) ** 2
             loss[None] += 0.5 * (dist[0, 0] + dist[1, 1])
 
 def substep(s):
@@ -239,7 +217,7 @@ fc, bw, bwr = 100, 0.5, -6
 ref = np.power(10.0, bwr / 20.0)
 a = -(np.pi * fc * bw) ** 2 / (4.0 * np.log(ref))
 e_np = np.exp(-a * t * t)
-e = ti.field(ti.f32, (steps, 17))
+e = ti.field(ti.f32, (1024, 17))
 e.from_numpy(e_np)
 
 @ti.kernel
@@ -247,120 +225,16 @@ def assign_ext_load():
     for t, node in ti.ndrange(max_steps, (2, 19)):
             f_ext[t, node, 8] = [0, -f_ext_scale* e[t, node - 2]]
 
-
-from scipy.stats import multivariate_normal
-
-def gaussian_damage(center, start=9000, cov=[[10, 0], [0, 10]]):
-    x, y = np.meshgrid(np.arange(Nx), np.arange(Ny))
-    coords = np.column_stack([x.ravel(), y.ravel()])
-    dmg = multivariate_normal.pdf(coords, mean=center, cov=cov)
-    dmg = dmg / dmg.max() * start
-    return dmg
-
-def gradient_damage(E_np, start, width, half_length, horizontal=True, E_start=1000, E_stop=10000):
-    interp = np.interp(np.arange(half_length), [0, half_length-1], [E_start, E_stop])
-    if horizontal:
-        for row in np.arange(width):
-            E_np[np.arange(start+Nx*row, start+half_length+Nx*row)] = interp
-            E_np[np.arange(start+Nx*row, start-half_length+Nx*row, -1)] = interp
-    else:
-        for col in np.arange(width):
-            E_np[np.arange(start+col, start+col+half_length*Nx, Nx)] = interp
-    return E_np
-case = ''
-
-case = 'd'
-
-case = 'dm'
-
-case = 'g'
-dmg = gaussian_damage([64, 0])
-dmg_ti = ti.field(dtype=real, shape=(n_particles), needs_grad=True)
-dmg_ti.from_numpy(dmg)
-
-case = 'gm'
-dmg1 = gaussian_damage([48, 0])
-dmg2 = gaussian_damage([80, 0])
-dmg1_ti = ti.field(dtype=real, shape=(n_particles), needs_grad=True)
-dmg2_ti = ti.field(dtype=real, shape=(n_particles), needs_grad=True)
-dmg1_ti.from_numpy(dmg1)
-dmg2_ti.from_numpy(dmg2)
-
-case = 'h'
-E_np_h = np.zeros(n_particles) + 10000
-E_np_h = gradient_damage(E_np_h, 64, 2, 16)
-E_h_ti = ti.field(dtype=real, shape=(n_particles), needs_grad=True)
-E_h_ti.from_numpy(E_np_h)
-
-case = 'v'
-E_np_v = np.zeros(n_particles) + 10000
-E_np_v = gradient_damage(E_np_v, 64, 3, 10, horizontal=False)
-E_v_ti = ti.field(dtype=real, shape=(n_particles), needs_grad=True)
-E_v_ti.from_numpy(E_np_v)
-
-case = 'vm'
-E_np_vm = np.zeros(n_particles) + 10000
-E_np_vm = gradient_damage(E_np_vm, 48, 3, 10, horizontal=False)
-E_np_vm = gradient_damage(E_np_vm, 80, 3, 10, horizontal=False)
-E_vm_ti = ti.field(dtype=real, shape=(n_particles), needs_grad=True)
-E_vm_ti.from_numpy(E_np_vm)
-
-case = 'gt'
-dmg_t = gaussian_damage([64, 15])
-dmg_t_ti = ti.field(dtype=real, shape=(n_particles), needs_grad=True)
-dmg_t_ti.from_numpy(dmg_t)
-
-case = 'gtm'
-dmg1_t = gaussian_damage([48, 15])
-dmg2_t = gaussian_damage([80, 15])
-dmg1_t_ti = ti.field(dtype=real, shape=(n_particles), needs_grad=True)
-dmg2_t_ti = ti.field(dtype=real, shape=(n_particles), needs_grad=True)
-dmg1_t_ti.from_numpy(dmg1_t)
-dmg2_t_ti.from_numpy(dmg2_t)
-
-case = 'ht'
-E_np_ht = np.zeros(n_particles) + 10000
-E_np_ht = gradient_damage(E_np_ht, n_particles-Nx-64, 2, 16)
-E_ht_ti = ti.field(dtype=real, shape=(n_particles), needs_grad=True)
-E_ht_ti.from_numpy(E_np_ht)
-
-
 @ti.kernel
 def assign_E():
-    E.fill(10000)
-    if case == 'd':
-        for i in range(3):
-            for j in range(3):
-                E[64 + Nx*i + j] = 1000
-    if case == 'dm':
-        for i in range(3):
-            for j in range(3):
-                E[48 + Nx*i + j] = 1000
-                E[80 + Nx*i + j] = 1000
-    if case == 'g':
-        for i in range(n_particles):
-            E[i] = E[i] - dmg_ti[i]
-    if case == 'gm':
-        for i in range(n_particles):
-            E[i] = E[i] - dmg1_ti[i] - dmg2_ti[i]
-    if case == 'h':
-        for i in range(n_particles):
-            E[i] = E_h_ti[i]
-    if case == 'v':
-        for i in range(n_particles):
-            E[i] = E_v_ti[i]
-    if case == 'vm':
-        for i in range(n_particles):
-            E[i] = E_vm_ti[i]
-    if case == 'gt':
-        for i in range(n_particles):
-            E[i] = E[i] - dmg_t_ti[i]
-    if case == 'gtm':
-        for i in range(n_particles):
-            E[i] = E[i] - dmg1_t_ti[i] - dmg2_t_ti[i]
-    if case == 'ht':
-        for i in range(n_particles):
-            E[i] = E_ht_ti[i]
+    for i in range(n_particles):
+        col = i % Nx
+        if col < 20 or col >= 60:
+            E[i] = 1.1e4
+        elif col >= 20 and col < 40:
+            E[i] = 0.9e4
+        else:
+            E[i] = 0.9e4
 
 
 for i in range(n_particles):
@@ -372,7 +246,8 @@ for i in range(Nx):
     for j in range(Ny):
         x[0, j * Nx + i] = [
             (i)/(Nx) * 0.8 + 0.1 + 0.8 / Nx * 0.5, 
-            (j)/(Ny) * 0.1 + 0.3 + 0.1 / Ny * 0.5]
+            (j)/(Ny) * 0.1 + 0.3 + 0.1 / Ny * 0.5
+            ]
 
 
 print('running target sim')
@@ -382,55 +257,4 @@ assign_E()
 for s in range(steps):
     substep(s)
 
-x_np = x.to_numpy()
-
-node_locs = ti.Vector.field(dim,
-                            dtype=real,
-                            shape=(max_steps, n_grid * n_grid))
-load_locs = ti.Vector.field(dim,
-                            dtype=real,
-                            shape=(max_steps))
-pin_locs = ti.Vector.field(dim,
-                            dtype=real,
-                            shape=(max_steps))
-roller_locs = ti.Vector.field(dim,
-                            dtype=real,
-                            shape=(max_steps))
-
-# @ti.kernel
-# def assign_node_locs():
-#     for s in range(max_steps):
-#         load_locs[s] = [2*dx + velocity * s * dt, 15 * dx]
-#         for i in range(n_grid):
-#             for j in range(n_grid):
-#                 node_locs[s, i * n_grid + j] = [i * dx, j * dx]
-# print('assigning node locs')
-# assign_node_locs()
-# gui = ti.GUI("Taichi Elements", (640, 640), background_color=0x112F41)
-# out_dir = 'out_test'
-
-# frame = 0
-# x_np = x.to_numpy()
-# node_locs_np = node_locs.to_numpy()
-# load_locs_np = load_locs.to_numpy()
-# for s in range(0, steps, 1):
-#     scale = 4
-#     gui.circles(x_np[s, :2*Nx], color=0x198C19, radius=1.5)
-#     # gui.circles(x_np[s, [42,43,42+80,43+80]], color=0xFF0000, radius=1.5)
-#     gui.circles(x_np[s, 2*Nx:], color=0xFFA500, radius=1.5)
-#     # x_np_reshape = einops.rearrange(x_np[s], '(w x h y) c -> (h w) x y c', h=4, w=1, x=10, c=2)
-#     # gui.circles(x_np_reshape[[0,3]].reshape((-1, dim)), color=0x198C19, radius=1.5)
-#     # gui.circles(x_np_reshape[[1,2]].reshape((-1, dim)), color=0xFF4400, radius=1.5)
-#     # # gui.circles(x_np_reshape[[2]].reshape((-1, dim)), color=0xFDB100, radius=1.5)
-#     gui.circles(node_locs_np[s], color=0xFFFFFF, radius=1)
-    
-#     # gui.circle(load_locs_np[s], color=0xFF0000, radius=10)
-#     # gui.arrow(orig=load_locs_np[s], direction = [0, -dx], color=0xFF0000, radius=3)
-#     # gui.triangle([2 * dx, 6 * dx], [1.5 * dx, 5.5 * dx], [2.5 * dx, 5.5 * dx], color=0x00FF00)
-#     # gui.triangle([18 * dx, 6 * dx], [17.5 * dx, 5.5 * dx], [18.5 * dx, 5.5 * dx], color=0x00FF00)
-#     gui.show(f'{out_dir}/{frame:06d}.png')
-#     frame += 1
-
-
-np.save('x_true_' + case + '.npy', x_np)
-np.save('strain2_true_' + case + '.npy', strain2.to_numpy())
+np.save('strain2_true.npy', strain2.to_numpy())
