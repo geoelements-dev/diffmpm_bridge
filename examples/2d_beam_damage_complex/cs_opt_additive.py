@@ -466,79 +466,79 @@ if not os.path.exists(filename):
         json.dump(result_dict, outfile)
 
 
-# name = f"r_c_add_{case}_{obs}_{n_search}_p1.json"
-# with open(name) as json_file:
-#         jf = json.load(json_file)
+name = f"r_c_add_{case}_{obs}_{n_search}_p1.json"
+with open(name) as json_file:
+        jf = json.load(json_file)
 
-# locked_indices_arr = np.array(jf["locked_indices"])
-# locked_values_arr = np.array(jf["locked_values"])
+locked_indices_arr = np.array(jf["locked_indices"])
+locked_values_arr = np.array(jf["locked_values"])
 
-# # reoptimize locked values
-# print('Phase 2')
-# n_targets = n_search
-# n_locked = n_particles - n_targets
+# reoptimize locked values
+print('Phase 2')
+n_targets = n_search
+n_locked = n_particles - n_targets
 
-# target_indices_np = np.concatenate((locked_indices_arr, np.zeros(n_locked)))
-# target_indices.from_numpy(target_indices_np)
+target_indices_np = np.concatenate((locked_indices_arr, np.zeros(n_locked)))
+target_indices.from_numpy(target_indices_np)
 
-# params = np.zeros(n_targets) + init_e
+params = np.zeros(n_targets) + init_e
 
 
-# @ti.kernel
-# def assign_E_modular_p2():
-#     E.fill(init_e)
-#     for i in range(n_targets):
-#         E[target_indices[i]] = target_values[i]
+@ti.kernel
+def assign_E_modular_p2():
+    E.fill(init_e)
+    for i in range(n_targets):
+        E[target_indices[i]] = target_values[i]
 
-# def compute_loss_and_grad_modular_p2(params):
-#     grid_v_in.fill(0)
-#     grid_m_in.fill(0)
-#     loss[None] = 0
-#     for i in range(n_targets):
-#         target_values[i] = params[i]
-#     with ti.ad.Tape(loss=loss):
-#         assign_E_modular_p2()
-#         assign_ext_load()
-#         for s in range(steps - 1):
-#             substep(s)
-#         compute_loss()
+def compute_loss_and_grad_modular_p2(params):
+    grid_v_in.fill(0)
+    grid_m_in.fill(0)
+    loss[None] = 0
+    for i in range(n_targets):
+        target_values[i] = params[i]
+    with ti.ad.Tape(loss=loss):
+        assign_E_modular_p2()
+        assign_ext_load()
+        for s in range(steps - 1):
+            substep(s)
+        compute_loss()
 
-#     loss_val = loss[None]
-#     grad_val = [target_values.grad[i] for i in range(n_targets)]
+    loss_val = loss[None]
+    grad_val = [target_values.grad[i] for i in range(n_targets)]
 
-#     return loss_val, grad_val
+    return loss_val, grad_val
 
-# deviation = 0
-# converge_counter = 0
-# baseline = np.zeros(n_targets) + init_e
-# init_e_p2 = 100
-# params = np.zeros(n_targets) + init_e_p2
-# while deviation < converged_threshold:
-#     print("converge counter: ", converge_counter)
-#     result = minimize(compute_loss_and_grad_modular_p2,
-#                 params,
-#                 method='L-BFGS-B',
-#                 jac=True,
-#                 bounds = [(0, 10000) for i in range(len(params))],
-#                 options=options)
-#     # find highest deviation particle
-#     E_search = np.array(result.x)
-#     deviation = max(E_search - baseline)
-#     print(E_search)
-#     converge_counter += 1
-# E_hist.append(E.to_numpy().tolist())
+deviation = 0
+converge_counter = 0
+baseline = np.zeros(n_targets) + init_e
+init_e_p2 = 100
+params = np.zeros(n_targets) + init_e_p2
+while deviation < converged_threshold:
+    print("converge counter: ", converge_counter)
+    result = minimize(compute_loss_and_grad_modular_p2,
+                params,
+                method='L-BFGS-B',
+                jac=True,
+                bounds = [(100, 6000) for i in range(len(params))],
+                options=options)
+    # find highest deviation particle
+    E_search = np.array(result.x)
+    deviation = max(np.abs(E_search - init_e_p2))
+    print(E_search, deviation)
+    converge_counter += 1
+E_hist.append(E.to_numpy().tolist())
 
-# print("final: ", result.x)
-# print("found:")
-# print(locked_indices_arr)
+print("final: ", result.x)
+print("found:")
+print(locked_indices_arr)
 
-# result_dict = {
-#     "E_hist" : E_hist,
-#     "locked_indices" : locked_indices_arr.tolist(),
-#     "locked_values" : locked_values_arr.tolist()
-# }
+result_dict = {
+    "E_hist" : E_hist,
+    "locked_indices" : locked_indices_arr.tolist(),
+    "locked_values" : np.array(result.x).tolist()
+}
 
-# filename = f"r_c_add_{case}_{obs}_{n_search}_p2.json"
-# with open(filename, "w") as outfile: 
-#     json.dump(result_dict, outfile)
+filename = f"r_c_add_{case}_{obs}_{n_search}_p2.json"
+with open(filename, "w") as outfile: 
+    json.dump(result_dict, outfile)
 

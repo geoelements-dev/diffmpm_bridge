@@ -7,13 +7,13 @@ import multiprocessing
 # Define the combinations
 obs_choices = ["full", "sensor"]
 cases = ['d', 'dm', 'g', 'gm', 'h', 'v', 'vm', 'gt', 'gtm', 'ht']
-deviation_threshold_list = [0.3, 0.5, 0.8, 0.9, 0.95, 0.98, 1]
+deviation_threshold_list = [0.3, 0.5, 0.8,]
 
 # The target script name
 target_script = "cs_true.py"
 target_script_damaged = "cs_opt.py"
 
-max_concurrent_processes = 3
+max_concurrent_processes = 10
 
 def run_true(case, semaphore):
     result_filename = f"s_cs_{case}.npy"

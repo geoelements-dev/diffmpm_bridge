@@ -376,7 +376,7 @@ for l, obs_case in enumerate(obs_cases):
 result_naive = result
 
 def stable_regions(x, reference, n_percent=10, m=2):
-    deviation = (x - reference) ** 2
+    deviation = np.abs(x - reference)
     n_elements = int(len(deviation) * (n_percent / 100))
     
     # Get indices of the lowest n% deviations
@@ -399,7 +399,7 @@ def assign_E_modular():
 
 # get stable/unstable indices
 mask_start = 1e1
-stable, std, exceed = stable_regions(np.array(result), 4e3, n_percent=50, m=1e3)
+stable, std, exceed = stable_regions(np.array(result), 4e3, n_percent=50, m=1e2)
 if len(exceed) == 0:
     exceed = np.arange(n_particles)
     mask_start = 4e3
@@ -422,10 +422,10 @@ def compute_loss_and_grad_modular(params):
 
     losses.append(loss_val)
     E_hist.append(params.tolist())
-    print(j, 
-        'loss=', loss, 
-        '   grad=', grad_val,
-        '   params=', params)
+    # print(j, 
+    #     'loss=', loss, 
+    #     '   grad=', grad_val,
+    #     '   params=', params)
     return loss_val, grad_val
 
 

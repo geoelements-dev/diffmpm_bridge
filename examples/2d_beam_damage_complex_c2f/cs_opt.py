@@ -245,7 +245,7 @@ def compute_loss():
                 loss[None] += 0.5 * (dist[0, 0])*1e20
         elif obs == "sensor":
             for j in range(16):
-                dist = (target_strain[i, j*12] - strain2[i, j*12]) ** 2
+                dist = (target_strain[i, j*16] - strain2[i, j*16]) ** 2
                 loss[None] += 0.5 * (dist[0, 0])*1e20
 
 def substep(s):
@@ -275,8 +275,8 @@ def assign_ext_load():
     for t, node in ti.ndrange(max_steps, n_grid):
             f_ext[t, node, 10] = [0, -f_ext_scale * e[t, node]]
 
-n_blocks_y = 2
-n_blocks_x = 32
+n_blocks_y = 1
+n_blocks_x = 16
 n_blocks = n_blocks_y * n_blocks_x
 block_nx = int(Nx / n_blocks_x)
 block_ny = int(Ny / n_blocks_y)
@@ -446,10 +446,10 @@ def compute_block_indices(host_idx, host_size):
 
     return sub_block_indices, np.array(particle_idx)
 
-@ti.kernel
-def fill_taichi(arr: ti.types.ndarray()):
-    for i in range(n_particles):
-        sub_block_particle_index[zti, i] = arr[i]
+# @ti.kernel
+# def fill_taichi(arr: ti.types.ndarray()):
+#     for i in range(n_particles):
+#         sub_block_particle_index[zti, i] = arr[i]
 
 ###
 
@@ -477,11 +477,10 @@ result = minimize(compute_loss_and_grad,
                     method='L-BFGS-B',
                     jac=True,
                     options=options)
-print(result.x)
 intermediate_results.append(E.to_numpy().tolist())
 
 background_value = init_e
-sub_block_order = [8, 4, 2, 1]
+sub_block_order = [16, 8, 4, 2, 1]
 sub_block_tracker = []
 # deviation_threshold = 0.5
 
@@ -490,9 +489,9 @@ sub_block_values = ti.field(dtype=real, shape=(n_particles), needs_grad=True)
 
 
 
-for z in range(3):
+for z in range(4):
 
-    print("iteration: ", z, ", block size: ", sub_block_order[z + 1])
+    # print("iteration: ", z, ", block size: ", sub_block_order[z + 1])
     # get blocks that vary
     # stable, std, exceed = stable_regions(np.array(result.x), init_e, n_percent=50, m=1e3)
     deviation = np.abs(np.array(result.x) - background_value)
@@ -501,7 +500,7 @@ for z in range(3):
     exceed_values = np.array(result.x)[exceed]
     if z > 0:
         exceed = sub_block_tracker[z-1][exceed]
-    print("found: ", exceed, exceed_values)
+    # print("found: ", exceed, exceed_values)
 
 
     # subdivide block
@@ -509,19 +508,22 @@ for z in range(3):
     n_sub_blocks = len(exceed) * 4
     sub_block_x = sub_block_order[z + 1]
     sub_block_y = sub_block_order[z + 1]
+
+    
     if z == 0: # dummy iteration to initialize sub_block_values
-        print('dummy iteration')
         n_targets = n_particles
         minimize(compute_loss_and_grad_refine,
                     np.zeros(n_particles) + init_e,
                     method='L-BFGS-B',
                     jac=True,
-                    options=options,
-                    bounds = [(0, 10000) for i in range(n_targets)]
+                    options={"maxiter" : 1},
+                    bounds = [(100, 10000) for i in range(n_targets)]
                     )
     n_targets = len(exceed) * 4
     sub_block_index_np, sub_block_particle_index_np = compute_block_indices(exceed, sub_block_order[z])
-    print("next: ", sub_block_index_np)
+    print(f"{z} next: ", sub_block_index_np)
+    print(sub_block_particle_index_np)
+    print(exceed_values)
     sub_block_particle_index_np = np.concatenate((
         sub_block_particle_index_np, 
         np.zeros(n_particles-len(sub_block_particle_index_np))
@@ -531,15 +533,23 @@ for z in range(3):
     sub_block_tracker.append(sub_block_index_np)
 
     # optimize
-    result = minimize(compute_loss_and_grad_refine,
-                        np.repeat(exceed_values, 4),
-                        method='L-BFGS-B',
-                        jac=True,
-                        options=options,
-                        bounds = [(0, 10000) for i in range(n_targets)]
-                        )
+    deviation2 = 0
+    converged_threshold = 1
+    converge_counter = 0
+    while deviation2 < converged_threshold:
+        result = minimize(compute_loss_and_grad_refine,
+                            np.repeat(exceed_values, 4),
+                            method='L-BFGS-B',
+                            jac=True,
+                            options=options,
+                            bounds = [(100, 10000) for i in range(n_targets)]
+                            )
+        E_search = np.array(result.x)
+        deviation2 = max(np.abs(E_search - np.repeat(exceed_values, 4)))
+        converge_counter += 1
+        print(converge_counter, f"r_c_{case}_{obs}_{int(deviation_threshold*10)}, ", "block size: ", sub_block_order[z + 1])
     # get results
-    print(result.x)
+    print(E_search)
     intermediate_results.append(E.to_numpy().tolist())
 
 
