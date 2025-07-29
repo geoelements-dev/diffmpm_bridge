@@ -7,7 +7,7 @@ import multiprocessing
 # Define the combinations
 obs_choices = ["full", "sensor"]
 cases = ['d', 'dm', 'g', 'gm', 'h', 'v', 'vm', 'gt', 'gtm', 'ht']
-n_searchs = ['1000', "30", "20", "10", "5"]
+n_searchs = ['100', "30", "20", "10", "5"]
 
 # The target script name
 target_script = "cs_true.py"
@@ -30,7 +30,7 @@ def run_true(case, semaphore):
 
 
 def run_until_done(obs, case, n_search, semaphore):
-    result_filename = f"r_c_add_{case}_{obs}_{n_search}_p2.json"
+    result_filename = f"r_c_add_{case}_{obs}_{n_search}_p1_2.json"
     
     with semaphore:
         while not os.path.exists(result_filename):
@@ -54,20 +54,9 @@ if __name__ == "__main__":
     for p_true in processes_true:
         p_true.join()
 
-    combinations = list(itertools.product(obs_choices, cases, n_searchs))
-    semaphore = multiprocessing.Semaphore(max_concurrent_processes)
-    # Launch a separate process for each combination
-    processes = []
-    for obs, case, n_search in combinations:
-        p = multiprocessing.Process(target=run_until_done, args=(obs, case, n_search, semaphore))
-        p.start()
-        processes.append(p)
+    
 
-    # Optional: Wait for all processes to finish
-    for p in processes:
-        p.join()
-
-    combinations = list(itertools.product(obs_choices, cases, ["20"]))
+    combinations = list(itertools.product(obs_choices, cases, n_searchs[1:]))
     semaphore = multiprocessing.Semaphore(max_concurrent_processes)
     # Launch a separate process for each combination
     processes = []
@@ -81,6 +70,19 @@ if __name__ == "__main__":
         p.join()
     
         combinations = list(itertools.product(obs_choices, cases, ["30"]))
+    semaphore = multiprocessing.Semaphore(max_concurrent_processes)
+    # Launch a separate process for each combination
+    processes = []
+    for obs, case, n_search in combinations:
+        p = multiprocessing.Process(target=run_until_done, args=(obs, case, n_search, semaphore))
+        p.start()
+        processes.append(p)
+
+    # Optional: Wait for all processes to finish
+    for p in processes:
+        p.join()
+
+    combinations = list(itertools.product(obs_choices, cases, n_searchs))
     semaphore = multiprocessing.Semaphore(max_concurrent_processes)
     # Launch a separate process for each combination
     processes = []

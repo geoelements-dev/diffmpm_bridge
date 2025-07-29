@@ -6,20 +6,23 @@ from math import pi
 
 ti.reset()
 real = ti.f32
-ti.init(arch=ti.cuda, default_fp=real, device_memory_GB=12)
+ti.init(arch=ti.cuda, default_fp=real, device_memory_GB=4)
 
 # init parameters
-size = 1
+size = 100 * 12
+span = 60 * 12
+depth = 4 * 12
 dim = 2
-Nx = 80  # reduce to 30 if run out of GPU memory
-Ny = 10
+Nx = 180  # reduce to 30 if run out of GPU memory
+Ny = 12
 n_particles = Nx * Ny
-n_grid = 20
-dx = 1 / n_grid
+n_grid = 25
+dx = size / n_grid
 inv_dx = 1 / dx
-dt = 1e-4
-p_mass = 1
-p_vol = 1
+dt = 1e-3
+p_vol = (span / Nx) * (depth / Ny)
+assert (span / Nx) == (depth / Ny)
+p_mass = 0.15 * p_vol / (12*12*12) # 0.15 klb/ft3 2400 kg/m3
 nu = 0.2
 
 max_steps = 1024
@@ -60,11 +63,11 @@ F = ti.Matrix.field(dim,
                     dtype=real,
                     shape=(max_steps, n_particles),
                     needs_grad=True)
-# strain = ti.Matrix.field(dim,
-#                          dim,
-#                          dtype=real,
-#                          shape=(max_steps, n_particles),
-#                          needs_grad=True)
+strain = ti.Matrix.field(dim,
+                         dim,
+                         dtype=real,
+                         shape=(max_steps, n_particles),
+                         needs_grad=True)
 strain2 = ti.Matrix.field(dim,
                          dim,
                          dtype=real,
@@ -73,20 +76,12 @@ strain2 = ti.Matrix.field(dim,
 loss = ti.field(dtype=real, shape=(), needs_grad=True)
 init_g = ti.field(dtype=real, shape=(), needs_grad=True)
 force = ti.field(dtype=real, shape=(), needs_grad=True)
+f_scale = ti.field(dtype=real, shape=(), needs_grad=True)
 E = ti.field(dtype=real, shape=(n_particles), needs_grad=True)
 
 
 @ti.kernel
 def p2g(f: ti.i32):
-    # for i in range(n_particles):
-    #     col = i % Nx
-    #     if col % 20 < 20 or col % 20 >= 60:
-    #         E[i] = E_params[0]
-    #     else:
-    #         if i < n_particles * 0.5:
-    #             E[i] = E_params[2]
-    #         else:
-    #             E[i] = E_params[1]
     for p in range(n_particles):
         base = ti.cast(x[f, p] * inv_dx - 0.5, ti.i32)
         fx = x[f, p] * inv_dx - ti.cast(base, ti.i32)
@@ -99,7 +94,7 @@ def p2g(f: ti.i32):
                  ti.Matrix.diag(2, E[p] * nu / ((1 + nu) * (1 - 2 * nu)) * (J - 1) * J)
         stress = -(dt * p_vol * 4 * inv_dx * inv_dx) * cauchy
         affine = stress + p_mass * C[f, p]
-        # strain[f, p] += 0.5 * (new_F.transpose() @ new_F - ti.math.eye(dim))
+        strain[f, p] += 0.5 * (new_F.transpose() @ new_F - ti.math.eye(dim))
         for i in ti.static(range(3)):
             for j in ti.static(range(3)):
                 offset = ti.Vector([i, j])
@@ -111,34 +106,13 @@ def p2g(f: ti.i32):
 
 @ti.kernel
 def grid_op(f: ti.i32):
-    # for t, node in ti.ndrange(max_steps, (2, 19)):
-    #         f_ext[t, node, 14] = [0, -force[None] * e[t, node - 2]]
     for i, j in ti.ndrange(n_grid, n_grid):     
         inv_m = 1 / (grid_m_in[f, i, j] + 1e-10) 
         v_out = inv_m * grid_v_in[f, i, j] + dt * f_ext[f, i, j]
-        # v_out[1] -= dt * gravity
-        if i == 2 and j == 6:
+        if i <= 5 and j <= 9:
             v_out[0] = 0
             v_out[1] = 0
-        if i == 1 and j == 6:
-            v_out[0] = 0
-            v_out[1] = 0
-        if i == 2 and j == 5:
-            v_out[0] = 0
-            v_out[1] = 0
-        if i == 1 and j == 5:
-            v_out[0] = 0
-            v_out[1] = 0
-        if i == 18 and j == 6:
-            v_out[0] = 0
-            v_out[1] = 0
-        if i == 19 and j == 6:
-            v_out[0] = 0
-            v_out[1] = 0
-        if i == 18 and j == 5:
-            v_out[0] = 0
-            v_out[1] = 0
-        if i == 19 and j == 5:
+        if i >= 20 and j <= 9:
             v_out[0] = 0
             v_out[1] = 0
         grid_v_out[f, i, j] = v_out
@@ -172,26 +146,25 @@ def g2p(f: ti.i32):
                         [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]])
         strain_rate = ti.Vector([0.0, 0.0, 0.0])
 
-
-        fx = fx * dx 
-        grad[0, 0] = 0.25 * fx[1] * (fx[1] - 1.) * (2 * fx[0] - 1.)
-        grad[1, 0] = 0.25 * fx[1] * (fx[1] - 1.) * (2 * fx[0] + 1.)
-        grad[2, 0] = 0.25 * fx[1] * (fx[1] + 1.) * (2 * fx[0] + 1.)
-        grad[3, 0] = 0.25 * fx[1] * (fx[1] + 1.) * (2 * fx[0] - 1.)
-        grad[4, 0] = -fx[0] * fx[1] * (fx[1] - 1.)
-        grad[5, 0] = -0.5 * (2. * fx[0] + 1.) * ((fx[1] * fx[1]) - 1.)
-        grad[6, 0] = -fx[0] * fx[1] * (fx[1] + 1.)
-        grad[7, 0] = -0.5 * (2. * fx[0] - 1.) * ((fx[1] * fx[1]) - 1.)
-        grad[8, 0] = 2. * fx[0] * ((fx[1] * fx[1]) - 1.)
-        grad[0, 1] = 0.25 * fx[0] * (fx[0] - 1.) * (2. * fx[1] - 1.)
-        grad[1, 1] = 0.25 * fx[0] * (fx[0] + 1.) * (2. * fx[1] - 1.)
-        grad[2, 1] = 0.25 * fx[0] * (fx[0] + 1.) * (2. * fx[1] + 1.)
-        grad[3, 1] = 0.25 * fx[0] * (fx[0] - 1.) * (2. * fx[1] + 1.)
-        grad[4, 1] = -0.5 * (2. * fx[1] - 1.) * ((fx[0] * fx[0]) - 1.)
-        grad[5, 1] = -fx[0] * fx[1] * (fx[0] + 1.)
-        grad[6, 1] = -0.5 * (2. * fx[1] + 1.) * ((fx[0] * fx[0]) - 1.)
-        grad[7, 1] = -fx[0] * fx[1] * (fx[0] - 1.)
-        grad[8, 1] = 2. * fx[1] * ((fx[0] * fx[0]) - 1.)
+        xi = fx - ti.cast(ti.Vector([1, 1]), real)
+        grad[0, 0] = 0.25 * xi[1] * (xi[1] - 1.) * (2 * xi[0] - 1.)
+        grad[1, 0] = 0.25 * xi[1] * (xi[1] - 1.) * (2 * xi[0] + 1.)
+        grad[2, 0] = 0.25 * xi[1] * (xi[1] + 1.) * (2 * xi[0] + 1.)
+        grad[3, 0] = 0.25 * xi[1] * (xi[1] + 1.) * (2 * xi[0] - 1.)
+        grad[4, 0] = -xi[0] * xi[1] * (xi[1] - 1.)
+        grad[5, 0] = -0.5 * (2. * xi[0] + 1.) * ((xi[1] * xi[1]) - 1.)
+        grad[6, 0] = -xi[0] * xi[1] * (xi[1] + 1.)
+        grad[7, 0] = -0.5 * (2. * xi[0] - 1.) * ((xi[1] * xi[1]) - 1.)
+        grad[8, 0] = 2. * xi[0] * ((xi[1] * xi[1]) - 1.)
+        grad[0, 1] = 0.25 * xi[0] * (xi[0] - 1.) * (2. * xi[1] - 1.)
+        grad[1, 1] = 0.25 * xi[0] * (xi[0] + 1.) * (2. * xi[1] - 1.)
+        grad[2, 1] = 0.25 * xi[0] * (xi[0] + 1.) * (2. * xi[1] + 1.)
+        grad[3, 1] = 0.25 * xi[0] * (xi[0] - 1.) * (2. * xi[1] + 1.)
+        grad[4, 1] = -0.5 * (2. * xi[1] - 1.) * ((xi[0] * xi[0]) - 1.)
+        grad[5, 1] = -xi[0] * xi[1] * (xi[0] + 1.)
+        grad[6, 1] = -0.5 * (2. * xi[1] + 1.) * ((xi[0] * xi[0]) - 1.)
+        grad[7, 1] = -xi[0] * xi[1] * (xi[0] - 1.)
+        grad[8, 1] = 2. * xi[1] * ((xi[0] * xi[0]) - 1.)
         
         vi[0, 0] = grid_v_out[f, base[0], base[1]][0]
         vi[1, 0] = grid_v_out[f, base[0] + 2, base[1]][0]
@@ -212,11 +185,26 @@ def g2p(f: ti.i32):
         vi[7, 1] = grid_v_out[f, base[0], base[1] + 1][1]
         vi[8, 1] = grid_v_out[f, base[0] + 1, base[1] + 1][1]
 
+        nodal_coordinates = ti.Matrix([
+            [base[0], base[1]],
+            [base[0] + 2, base[1]], 
+            [base[0] + 2, base[1] + 2], 
+            [base[0], base[1] + 2], 
+            [base[0] + 1, base[1]], 
+            [base[0] + 2, base[1] + 1], 
+            [base[0] + 1, base[1] + 2], 
+            [base[0], base[1] + 1], 
+            [base[0] + 1, base[1] + 1]
+            ], dt=ti.f32)
+        nodal_coordinates = nodal_coordinates * dx
+        J = grad.transpose() @ nodal_coordinates
+        dn_dx = grad @ J.inverse().transpose()
+
         # calc strain rate
         for k in ti.static(range(9)):
-            strain_rate[0] += grad[k, 0] * vi[k, 0]
-            strain_rate[1] += grad[k, 1] * vi[k, 1]
-            strain_rate[2] += grad[k, 0] * vi[k, 1] + grad[k, 1] * vi[k, 0]
+            strain_rate[0] += dn_dx[k, 0] * vi[k, 0]
+            strain_rate[1] += dn_dx[k, 1] * vi[k, 1]
+            strain_rate[2] += dn_dx[k, 0] * vi[k, 1] + dn_dx[k, 1] * vi[k, 0]
 
 
         dstrain = strain_rate * dt
@@ -229,57 +217,23 @@ def g2p(f: ti.i32):
         x[f + 1, p] = x[f, p] + dt * v[f + 1, p]
         C[f + 1, p] = new_C
 
-# diff = ti.field(real, shape=(max_steps, 10))
-# target_diff = ti.field(real, shape=(max_steps, 10))
-weighed_loss = False
-obs_choices = ["full", "row", "sensor"]
-obs = obs_choices[0]
+
+
 @ti.kernel
 def compute_loss():
     for i in range(steps - 1):
-        # for j in range(n_particles):
-        #     # sensor = j * 8
-        #     # diff = x[i, sensor + 8] - x[i, sensor]
-        #     # target_diff = (target_x[i, sensor + 8] - target_x[i, sensor])
-
-        #     # if j == 9:
-        #     #     diff = x[i, sensor + 7] - x[i, sensor]
-        #     #     target_diff = target_x[i, sensor + 7] - target_x[i, sensor]
-    
-        #     dist = (x[i, j] - target_x[i, j]) ** 2
-        #     loss[None] += 0.5 * (dist[0]+dist[1])*1e150# + dist[1, 1]) * 1e16
         if obs == "full":
             for j in range(n_particles):
                 dist = (target_strain[i, j] - strain2[i, j]) ** 2
-                # dist = (1 / ((steps - 1) * n_particles)) * \
-                #     (target_strain[i, j] - strain2[i, j]) ** 2
-                if weighed_loss:
-                    loss[None] += 0.5 * (dist[0, 0])*1e36* (2 - ti.math.sin(i * ti.math.pi / 80))# + dist[1, 1]) * 1e16
-                
-                else:
-                    loss[None] += 0.5 * (dist[0, 0])*1e20# + dist[1, 1]) * 1e16
+                loss[None] += 0.5 * (dist[0, 0])*1e20
         elif obs == "row":
             for j in range(Nx):
                 dist = (target_strain[i, j] - strain2[i, j]) ** 2
-                # dist = (1 / ((steps - 1) * n_particles)) * \
-                #     (target_strain[i, j] - strain2[i, j]) ** 2
-                if weighed_loss:
-                    loss[None] += 0.5 * (dist[0, 0])*1e36*(2 - ti.math.sin(i * ti.math.pi / 80))#(2 - ti.math.sin(i * ti.math.pi / 80))# / dist[0,0]# + dist[1, 1]) * 1e16
-                
-                else:
-                    loss[None] += 0.5 * (dist[0, 0])*1e36# + dist[1, 1]) * 1e16
+                loss[None] += 0.5 * (dist[0, 0])*1e20
         elif obs == "sensor":
             for j in range(16):
-                dist = (target_strain[i, j*5] - strain2[i, j*5]) ** 2
-                # dist = (1 / ((steps - 1) * n_particles)) * \
-                #     (target_strain[i, j] - strain2[i, j]) ** 2
-                if weighed_loss:
-                    loss[None] += 0.5 * (dist[0, 0])*1e36*(2 - ti.math.sin(i * ti.math.pi / 80))# + dist[1, 1]) * 1e16
-                
-                else:
-                    loss[None] += 0.5 * (dist[0, 0])*1e36# + dist[1, 1]) * 1e16
-
-
+                dist = (target_strain[i, j*12] - strain2[i, j*12]) ** 2
+                loss[None] += 0.5 * (dist[0, 0])*1e20
 
 def substep(s):
     p2g(s)
@@ -287,30 +241,29 @@ def substep(s):
     g2p(s)
 
 
-
-f_ext_scale = 5
-velocity = 100 #16 / 20 / 0.1
-node_x_locs = ti.Vector(np.arange(0, 17 / n_grid, 1 / n_grid))
+f_ext_scale = 50
+velocity = 100*12 # in/s
+node_x_locs = ti.Vector(np.arange(0, 1, 1 / n_grid) * size)
 time_to_center = node_x_locs / velocity
 t_steps = ti.Vector(np.arange(max_steps)) * dt
 t_steps_n = np.array([t_steps - time for time in time_to_center])
 t_steps_n = np.stack(t_steps_n, axis=1)
 
 t = np.asarray(t_steps_n)
-fc, bw, bwr = 100, 0.5, -6
+fc, bw, bwr = 20, 0.5, -6
 ref = np.power(10.0, bwr / 20.0)
 a = -(np.pi * fc * bw) ** 2 / (4.0 * np.log(ref))
 e_np = np.exp(-a * t * t)
-e = ti.field(ti.f32, (1024, 17))
+e = ti.field(ti.f32, (steps, n_grid))
 e.from_numpy(e_np)
 
 @ti.kernel
 def assign_ext_load():
-    for t, node in ti.ndrange(max_steps, (2, 19)):
-            f_ext[t, node, 8] = [0, -5* e[t, node - 2]]
+    for t, node in ti.ndrange(max_steps, n_grid):
+            f_ext[t, node, 10] = [0, -f_ext_scale * e[t, node]]
 
-n_blocks_y = 1
-n_blocks_x = 80
+n_blocks_x = 180
+n_blocks_y = 12
 n_blocks = n_blocks_y * n_blocks_x
 block_nx = int(Nx / n_blocks_x)
 block_ny = int(Ny / n_blocks_y)
@@ -323,18 +276,13 @@ def assign_E():
         col = i % Nx
         
         if row > 2:
-            E[i] = 10000
+            E[i] = 4000
         else:
-            E[i] = 10000 - exp_params[2] * ti.math.clamp( \
+            E[i] = 4000 - exp_params[2] * ti.math.clamp( \
                 1 / (ti.math.sqrt(2.0 * 3.1415) * exp_params[1]) \
-                * ti.math.exp(-ti.math.pow(((col)/(Nx) * 0.8 + 0.1 - exp_params[0]) / exp_params[1], 2.0) / 2),
+                * ti.math.exp(-ti.math.pow(((col)/(Nx) * 0.6 + 0.2 + 0.6 / Nx * 0.5 - exp_params[0]) / exp_params[1], 2.0) / 2),
                 0, 1)
-        
-    # for i in range(Nx):
-    #     for j in range(Ny):
-    #         block_index_x = i // block_nx
-    #         block_index_y = j // block_ny
-    #         E[j*Nx+i] = E_block[block_index_x + block_index_y * n_blocks_x]
+
 
 
 
@@ -342,11 +290,12 @@ def assign_E():
 for i in range(n_particles):
     F[0, i] = [[1, 0], [0, 1]]
 
-
-
 for i in range(Nx):
     for j in range(Ny):
-        x[0, j * Nx + i] = [(i)/(Nx) * 0.8 + 0.1, (j)/(Ny) * 0.1 + 0.3]
+        x[0, j * Nx + i] = [
+            ((i)/(Nx) * 0.6 + 0.2 + 0.6 / Nx * 0.5) * size, 
+            ((j)/(Ny) * 0.04 + 0.36 + 0.04 / Ny * 0.5) * size
+            ]
 
 
 
@@ -356,18 +305,14 @@ damaged = True
 if damaged: 
     target_strain_name = "strain2_true.npy"
 else:
-    target_strain_name = "strain2_true_original.npy"
+    target_strain_name = "s_cs_d.npy"
 target_strain_np = np.load(target_strain_name)
 target_strain = ti.Matrix.field(dim,
                             dim,
                            dtype=real,
                            shape=(max_steps, n_particles),
                            needs_grad=True)
-target_x_np = np.load('x_true.npy')
-target_x = ti.Vector.field(dim,
-                           dtype=real,
-                           shape=(max_steps, n_particles),
-                           needs_grad=True)
+
 
 
 # inject noise to eps_xx direction
@@ -412,10 +357,6 @@ if optim == 'lbfgs':
         grid_v_in.fill(0)
         grid_m_in.fill(0)
         loss[None] = 0
-        
-        # loc[None] = params[0]
-        # std[None] = params[1]
-        # height[None] = params[2]
 
         for i in range(3):
             exp_params[i] = params[i]
@@ -442,9 +383,10 @@ if optim == 'lbfgs':
             '   grad=', grad,
             '   params=', params)
    
-    initial_params = [0.5, 0.05, 5000]
+    initial_params = [0.5, 10, 3000]
+    obs = 'full'
 
-    tol = 1e-3600
+    tol = 1e-36
     options = {
         'disp': 1, 
         'ftol': tol, 
@@ -458,28 +400,22 @@ if optim == 'lbfgs':
                       method='L-BFGS-B',
                       jac=True,
                     # #   hess='2-point',
-                      bounds=((0, 1), (0, None), (0, None)),
+                    #   bounds=((0, 1), (0.001, 100), (0, 4000)),
                       callback=callback_fn,
                       options=options)
     print(result)
     
-    E_final = []
-    for i in range(n_particles):
-        E_final.append(E[i])
 
 
     result_dict = {
         "losses" : losses,
-        "E_final" : E_final,
+        "E_final" : E.to_numpy().tolist(),
         "params" : result.x.tolist(),
-        "final_strain" : strain2.to_numpy(),
-        "final_x" : x.to_numpy()
+        # "final_strain" : strain2.to_numpy(),
+        # "final_x" : x.to_numpy()
     }
-    filename = f"result_l_{initial_params[0]}_s_{initial_params[1]}_h_{initial_params[2]}_" + obs
-    if weighed_loss:
-        filename = filename + "_weighedloss"
-    if damaged:
-        filename = filename + "_damaged"
+    filename = f"result_l_{initial_params[0]}_s_{initial_params[1]}_h_{initial_params[2]}_{obs}"
+
     
     with open(filename + ".json", "w") as outfile: 
         json.dump(result_dict, outfile)
