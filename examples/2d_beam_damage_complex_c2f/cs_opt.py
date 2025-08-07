@@ -517,7 +517,7 @@ for z in range(4):
                     method='L-BFGS-B',
                     jac=True,
                     options={"maxiter" : 1},
-                    bounds = [(100, 10000) for i in range(n_targets)]
+                    bounds = [(100, 6000) for i in range(n_targets)]
                     )
     n_targets = len(exceed) * 4
     sub_block_index_np, sub_block_particle_index_np = compute_block_indices(exceed, sub_block_order[z])
@@ -538,11 +538,11 @@ for z in range(4):
     converge_counter = 0
     while deviation2 < converged_threshold:
         result = minimize(compute_loss_and_grad_refine,
-                            np.repeat(exceed_values, 4),
+                            np.repeat(np.zeros_like(exceed)+init_e, 4),
                             method='L-BFGS-B',
                             jac=True,
                             options=options,
-                            bounds = [(100, 10000) for i in range(n_targets)]
+                            bounds = [(100, 6000) for i in range(n_targets)]
                             )
         E_search = np.array(result.x)
         deviation2 = max(np.abs(E_search - np.repeat(exceed_values, 4)))

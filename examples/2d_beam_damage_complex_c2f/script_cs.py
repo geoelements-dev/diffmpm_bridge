@@ -7,7 +7,7 @@ import multiprocessing
 # Define the combinations
 obs_choices = ["full", "sensor"]
 cases = ['d', 'dm', 'g', 'gm', 'h', 'v', 'vm', 'gt', 'gtm', 'ht']
-deviation_threshold_list = [0.3, 0.5, 0.8,]
+deviation_threshold_list = [0.3, 0.5, 0.8]
 
 # The target script name
 target_script = "cs_true.py"
