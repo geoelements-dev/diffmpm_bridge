@@ -15,7 +15,7 @@ target_script_damaged = "cs_opt_naive.py"
 max_concurrent_processes = 3
 
 def run_true(case, semaphore):
-    result_filename = f"s_cs_{case}.npy"
+    result_filename = f"s_cs_{case}_f.npy"
     
     with semaphore:
         while not os.path.exists(result_filename):
@@ -29,7 +29,7 @@ def run_true(case, semaphore):
 
 
 def run_until_done(obs, case, semaphore):
-    result_filename = f"r_c_{case}_{obs}.json"
+    result_filename = f"r_c_{case}_{obs}_f.json"
     
     with semaphore:
         while not os.path.exists(result_filename):

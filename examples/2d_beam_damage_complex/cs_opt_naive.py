@@ -77,6 +77,7 @@ F = ti.Matrix.field(dim,
                     dtype=real,
                     shape=(max_steps, n_particles),
                     needs_grad=True)
+E = ti.field(dtype=real, shape=(n_particles), needs_grad=True)
 strain = ti.Matrix.field(dim,
                          dim,
                          dtype=real,
@@ -91,7 +92,6 @@ loss = ti.field(dtype=real, shape=(), needs_grad=True)
 init_g = ti.field(dtype=real, shape=(), needs_grad=True)
 force = ti.field(dtype=real, shape=(), needs_grad=True)
 f_scale = ti.field(dtype=real, shape=(), needs_grad=True)
-E = ti.field(dtype=real, shape=(n_particles), needs_grad=True)
 
 
 @ti.kernel
@@ -122,7 +122,7 @@ def p2g(f: ti.i32):
 def grid_op(f: ti.i32):
     for i, j in ti.ndrange(n_grid, n_grid):     
         inv_m = 1 / (grid_m_in[f, i, j] + 1e-10) 
-        v_out = inv_m * grid_v_in[f, i, j] + dt * f_ext[f, i, j]
+        v_out = inv_m * (grid_v_in[f, i, j] + dt * f_ext[f, i, j])
         if i <= 5 and j <= 9:
             v_out[0] = 0
             v_out[1] = 0
@@ -304,7 +304,7 @@ for i in range(Nx):
 print('loading target')
 
 
-target_strain_np = np.load(f's_cs_{case}.npy')
+target_strain_np = np.load(f's_cs_{case}_f.npy')
 
 target_strain = ti.Matrix.field(dim,
                             dim,
@@ -344,6 +344,7 @@ if optim == 'lbfgs':
         grid_v_in.fill(0)
         grid_m_in.fill(0)
         loss[None] = 0
+        # print(type(params))
         for i in range(n_blocks):
             E_block[i] = params[i]
         with ti.ad.Tape(loss=loss):
@@ -377,13 +378,13 @@ if optim == 'lbfgs':
         initial_params.append(init_e)
     E_hist.append(E_block.to_numpy().tolist())
 
-    tol = 1e-36
+    tol = 1e-16
     options = {
-        'disp': 1,  
+        # 'disp': 1,  
         'ftol': tol, 
         'gtol': tol,
         'tol': tol,
-        'verbose': 2,
+        # 'verbose': 2,
         'adaptive': True
         }
     
@@ -392,18 +393,18 @@ if optim == 'lbfgs':
                       method='L-BFGS-B',
                       jac=True,
                     #   hess='2-point',
-                      callback=callback_fn,
+                    #   callback=callback_fn,
                       options=options)
+    E_hist.append(result.x.tolist())
     t2 = time.time()
     print(result)
     print(t2-t1)
-    grad_tracker = np.array(grad_tracker)
-    print(grad_tracker.min(), grad_tracker.max())
+    # grad_tracker = np.array(grad_tracker)
+    # print(grad_tracker.min(), grad_tracker.max())
 
     result_dict = {
-        "losses" : losses,
         "E_hist" : E_hist
     }
 
-    with open(f"r_c_{case}_{obs}.json", "w") as outfile: 
+    with open(f"r_c_{case}_{obs}_f.json", "w") as outfile: 
         json.dump(result_dict, outfile)

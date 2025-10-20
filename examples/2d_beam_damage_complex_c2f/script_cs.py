@@ -13,10 +13,10 @@ deviation_threshold_list = [0.3, 0.5, 0.8]
 target_script = "cs_true.py"
 target_script_damaged = "cs_opt.py"
 
-max_concurrent_processes = 10
+max_concurrent_processes = 3
 
 def run_true(case, semaphore):
-    result_filename = f"s_cs_{case}.npy"
+    result_filename = f"s_cs_{case}_f.npy"
     
     with semaphore:
         while not os.path.exists(result_filename):
@@ -30,7 +30,7 @@ def run_true(case, semaphore):
 
 
 def run_until_done(obs, case, deviation_threshold, semaphore):
-    result_filename = f"r_c_{case}_{obs}_{int(deviation_threshold*10)}.json"
+    result_filename = f"r_c_{case}_{obs}_{int(deviation_threshold*10)}_f.json"
     
     with semaphore:
         while not os.path.exists(result_filename):

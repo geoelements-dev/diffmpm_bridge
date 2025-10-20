@@ -7,7 +7,7 @@ import multiprocessing
 # Define the combinations
 obs_choices = ["full", "sensor"]
 cases = ['d', 'dm', 'g', 'gm', 'h', 'v', 'vm', 'gt', 'gtm', 'ht']
-n_searchs = ['100', "30", "20", "10", "5"]
+n_searchs = ["60"]
 
 # The target script name
 target_script = "cs_true.py"
@@ -16,7 +16,7 @@ target_script_damaged = "cs_opt_additive.py"
 max_concurrent_processes = 5
 
 def run_true(case, semaphore):
-    result_filename = f"s_cs_{case}.npy"
+    result_filename = f"s_cs_{case}_f.npy"
     
     with semaphore:
         while not os.path.exists(result_filename):
@@ -30,7 +30,7 @@ def run_true(case, semaphore):
 
 
 def run_until_done(obs, case, n_search, semaphore):
-    result_filename = f"r_c_add_{case}_{obs}_{n_search}_p1_2.json"
+    result_filename = f"r_c_add_{case}_{obs}_{n_search}_p1_2_f.json"
     
     with semaphore:
         while not os.path.exists(result_filename):

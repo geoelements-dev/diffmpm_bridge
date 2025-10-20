@@ -5,19 +5,17 @@ import itertools
 import multiprocessing
 
 # Define the combinations
-obss = ["full", "row", "sensor"]
+obss = ["full", "sensor"]
 damageds = ["0", "1"]
 init_es = ["2000", "4000", "6000"]
 
 # The target script name
 target_script = "cs_opt.py"
 
-# Sleep time between runs (in seconds)
-sleep_interval = 15 * 60  # 10 minutes
-max_concurrent_processes = 3
+max_concurrent_processes = 2
 
 def run_until_done(obs, damaged, init_e, semaphore):
-    result_filename = f"r_c_{damaged}_{init_e}_{obs}.json"
+    result_filename = f"r_c_{damaged}_{init_e}_{obs}_f.json"
     
     with semaphore:
         while not os.path.exists(result_filename):

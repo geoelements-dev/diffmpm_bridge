@@ -15,7 +15,7 @@ target_script_damaged = "cs_opt_mask.py"
 max_concurrent_processes = 3
 
 def run_true(case, semaphore):
-    result_filename = f"s_cs_{case}.npy"
+    result_filename = f"s_cs_{case}_f.npy"
     
     with semaphore:
         while not os.path.exists(result_filename):
@@ -29,7 +29,7 @@ def run_true(case, semaphore):
 
 
 def run_until_done(obs, case, semaphore):
-    result_filename = f"r_c_mask_{case}_{obs}_start_{int(1e1)}.json"
+    result_filename = f"r_c_mask_{case}_{obs}_start_{int(1e1)}_f.json"
     
     with semaphore:
         while not os.path.exists(result_filename):

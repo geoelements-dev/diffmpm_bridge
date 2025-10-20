@@ -123,7 +123,7 @@ def p2g(f: ti.i32):
 def grid_op(f: ti.i32):
     for i, j in ti.ndrange(n_grid, n_grid):     
         inv_m = 1 / (grid_m_in[f, i, j] + 1e-10) 
-        v_out = inv_m * grid_v_in[f, i, j] + dt * f_ext[f, i, j]
+        v_out = inv_m * (grid_v_in[f, i, j] + dt * f_ext[f, i, j])
         if i <= 5 and j <= 9:
             v_out[0] = 0
             v_out[1] = 0
@@ -305,9 +305,9 @@ for i in range(Nx):
 print('loading target')
 
 if damaged == "0":
-    target_strain_np = np.load('s_cs.npy')
+    target_strain_np = np.load('s_cs_f.npy')
 else:
-    target_strain_np = np.load('s_cs_damaged.npy')
+    target_strain_np = np.load('s_cs_damaged_f.npy')
 target_strain = ti.Matrix.field(dim,
                             dim,
                            dtype=real,
@@ -379,7 +379,7 @@ if optim == 'lbfgs':
         initial_params.append(init_e)
     E_hist.append(E_block.to_numpy().tolist())
 
-    tol = 1e-36
+    tol = 1e-16
     options = {
         'disp': 1,  
         'ftol': tol, 
@@ -394,18 +394,19 @@ if optim == 'lbfgs':
                       method='L-BFGS-B',
                       jac=True,
                     #   hess='2-point',
-                      callback=callback_fn,
+                    #   callback=callback_fn,
                       options=options)
     t2 = time.time()
-    print(result)
-    print(t2-t1)
-    grad_tracker = np.array(grad_tracker)
-    print(grad_tracker.min(), grad_tracker.max())
+    E_hist.append(E.to_numpy().tolist())
+    # print(result)
+    # print(t2-t1)
+    # grad_tracker = np.array(grad_tracker)
+    # print(grad_tracker.min(), grad_tracker.max())
 
     result_dict = {
         "losses" : losses,
         "E_hist" : E_hist
     }
 
-    with open(f"r_c_{int(damaged)}_{int(init_e)}_{obs}.json", "w") as outfile: 
+    with open(f"r_c_{int(damaged)}_{int(init_e)}_{obs}_f.json", "w") as outfile: 
         json.dump(result_dict, outfile)

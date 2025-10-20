@@ -121,7 +121,7 @@ def p2g(f: ti.i32):
 def grid_op(f: ti.i32):
     for i, j in ti.ndrange(n_grid, n_grid):     
         inv_m = 1 / (grid_m_in[f, i, j] + 1e-10) 
-        v_out = inv_m * grid_v_in[f, i, j] + dt * f_ext[f, i, j]
+        v_out = inv_m * (grid_v_in[f, i, j] + dt * f_ext[f, i, j])
         if i <= 5 and j <= 9:
             v_out[0] = 0
             v_out[1] = 0
@@ -304,7 +304,7 @@ for i in range(Nx):
 print('loading target')
 
 
-target_strain_np = np.load(f's_cs_{case}.npy')
+target_strain_np = np.load(f's_cs_{case}_f.npy')
 
 target_strain = ti.Matrix.field(dim,
                             dim,
@@ -553,7 +553,7 @@ for z in range(4):
     intermediate_results.append(E.to_numpy().tolist())
 
 
-filename = f"r_c_{case}_{obs}_{int(deviation_threshold*10)}"
+filename = f"r_c_{case}_{obs}_{int(deviation_threshold*10)}_f"
 
 result_dict = {
     # "losses" : losses,

@@ -123,7 +123,7 @@ def p2g(f: ti.i32):
 def grid_op(f: ti.i32):
     for i, j in ti.ndrange(n_grid, n_grid):     
         inv_m = 1 / (grid_m_in[f, i, j] + 1e-10) 
-        v_out = inv_m * grid_v_in[f, i, j] + dt * f_ext[f, i, j]
+        v_out = inv_m * (grid_v_in[f, i, j] + dt * f_ext[f, i, j])
         if i <= 5 and j <= 9:
             v_out[0] = 0
             v_out[1] = 0
@@ -305,7 +305,7 @@ for i in range(Nx):
 print('loading target')
 
 
-target_strain_np = np.load(f's_cs_{case}.npy')
+target_strain_np = np.load(f's_cs_{case}_f.npy')
 
 target_strain = ti.Matrix.field(dim,
                             dim,
@@ -396,7 +396,7 @@ locked_values = ti.field(dtype=real, shape=(n_particles))
 E_hist = []
 
 import os
-filename = f"r_c_add_{case}_{obs}_{n_search}_p1_2.json"
+filename = f"r_c_add_{case}_{obs}_{n_search}_p1_2_f.json"
 if not os.path.exists(filename):
 
     for z in range(n_search):
@@ -466,7 +466,7 @@ if not os.path.exists(filename):
         json.dump(result_dict, outfile)
 
 
-name = f"r_c_add_{case}_{obs}_{n_search}_p1_2.json"
+name = f"r_c_add_{case}_{obs}_{n_search}_p1_2_f.json"
 with open(name) as json_file:
         jf = json.load(json_file)
 

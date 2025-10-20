@@ -121,7 +121,7 @@ def p2g(f: ti.i32):
 def grid_op(f: ti.i32):
     for i, j in ti.ndrange(n_grid, n_grid):     
         inv_m = 1 / (grid_m_in[f, i, j] + 1e-10) 
-        v_out = inv_m * grid_v_in[f, i, j] + dt * f_ext[f, i, j]
+        v_out = inv_m * (grid_v_in[f, i, j] + dt * f_ext[f, i, j])
         if i <= 5 and j <= 9:
             v_out[0] = 0
             v_out[1] = 0
@@ -303,7 +303,7 @@ for i in range(Nx):
 print('loading target')
 
 
-target_strain_np = np.load(f's_cs_{case}.npy')
+target_strain_np = np.load(f's_cs_{case}_f.npy')
 
 target_strain = ti.Matrix.field(dim,
                             dim,
@@ -368,7 +368,7 @@ def callback_fn(intermediate_result):
 
 # run naive once
 obs_cases = [
-        f"r_c_{case}_{obs}.json",
+        f"r_c_{case}_{obs}_f.json",
     ]
 for l, obs_case in enumerate(obs_cases):
     with open(obs_case) as json_file:
@@ -442,7 +442,7 @@ for i in range(n_targets):
 initial_params = target_values.to_numpy()
 tol = 1e-3
 options = {
-    'disp': 1, 
+    # 'disp': 1, 
     'ftol': tol, 
     'gtol': tol,
     }
@@ -457,7 +457,7 @@ result_2 = minimize(compute_loss_and_grad_modular,
                     )
 print(result_2.x)
 
-filename = f"r_c_mask_{case}_{obs}_start_{int(mask_start)}.json"
+filename = f"r_c_mask_{case}_{obs}_start_{int(mask_start)}_f.json"
 
 result_dict = {
     "losses" : losses,

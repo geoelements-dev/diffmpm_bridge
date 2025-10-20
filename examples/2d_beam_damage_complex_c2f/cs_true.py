@@ -115,7 +115,7 @@ def p2g(f: ti.i32):
 def grid_op(f: ti.i32):
     for i, j in ti.ndrange(n_grid, n_grid):     
         inv_m = 1 / (grid_m_in[f, i, j] + 1e-10) 
-        v_out = inv_m * grid_v_in[f, i, j] + dt * f_ext[f, i, j]
+        v_out = inv_m * (grid_v_in[f, i, j] + dt * f_ext[f, i, j])
         if i <= 5 and j <= 9:
             v_out[0] = 0
             v_out[1] = 0
@@ -431,6 +431,6 @@ for s in range(steps):
 
 
 
-np.save(f'x_cs_{case}.npy', x.to_numpy())
-np.save(f's_cs1_{case}.npy', strain.to_numpy())
-np.save(f's_cs_{case}.npy', strain2.to_numpy())
+np.save(f'x_cs_{case}_f.npy', x.to_numpy())
+np.save(f's_cs1_{case}_f.npy', strain.to_numpy())
+np.save(f's_cs_{case}_f.npy', strain2.to_numpy())
