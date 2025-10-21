@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=diffmpm_test
-#SBATCH --output=diffmpm_test.o%j
-#SBATCH --error=diffmpm_test.e%j
+#SBATCH --output=results/diffmpm_test.o%j
+#SBATCH --error=results/diffmpm_test.e%j
 #SBATCH --partition=rtx     
 #SBATCH --time=48:00:00   
 #SBATCH --nodes=1
