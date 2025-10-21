@@ -1,7 +1,7 @@
 import taichi as ti
 import numpy as np
-import matplotlib.pyplot as plt
-import json, einops
+# import matplotlib.pyplot as plt
+# import json, einops
 
 ti.reset()
 real = ti.f32
