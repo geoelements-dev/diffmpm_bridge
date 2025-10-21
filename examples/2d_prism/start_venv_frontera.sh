@@ -1,6 +1,6 @@
 #!/bin/bash
 
-module reset
+# module reset
 
 # start env
 # ---------

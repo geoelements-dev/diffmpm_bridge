@@ -11,7 +11,6 @@
 #SBATCH -A BCS20003
 
 # Activate environment
-module spider cuda/12.2
 set -e
 source start_venv_frontera.sh
 
