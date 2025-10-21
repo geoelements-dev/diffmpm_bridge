@@ -13,6 +13,6 @@ module load impi/19.0.9
 #module load mvapich2/2.3.7ss
 
 module load phdf5/1.10.4
-module load python3/3.9.2
+module load python3/3.9
 
 export LD_LIBRARY_PATH=/usr/lib64:$LD_LIBRARY_PATH
