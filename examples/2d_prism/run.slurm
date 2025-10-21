@@ -15,7 +15,7 @@ set -e
 source start_venv_frontera.sh
 
 # Define paths
-mkdir "results"
+# mkdir "results"
 
 # Run Training
 python true_randomized.py
