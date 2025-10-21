@@ -2,7 +2,7 @@
 #SBATCH --job-name=diffmpm_test
 #SBATCH --output=results/diffmpm_test_o%j.txt
 #SBATCH --error=results/diffmpm_test_e%j.txt
-#SBATCH --partition=rtx     
+#SBATCH --partition=normal     
 #SBATCH --time=48:00:00   
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -15,7 +15,7 @@ set -e
 source start_venv_frontera.sh
 
 # Define paths
-mkdir "resuts"
+mkdir "results"
 
 # Run Training
 python true_randomized.py
