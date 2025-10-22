@@ -524,5 +524,5 @@ if optim == 'lbfgs':
         "param_hist" : param_hist,
     }
 
-    with open(f"results/r_4_{obs}_{losstype}_{snapshot}_{n_blocks_x}_{n_blocks_y}_{width}.json", "w") as outfile: 
+    with open(f"results/r_16_0.002_{obs}_{losstype}_{snapshot}_{n_blocks_x}_{n_blocks_y}_{width}.json", "w") as outfile: 
         json.dump(result_dict, outfile)
