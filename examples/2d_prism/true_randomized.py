@@ -14,11 +14,11 @@ size = 2.000 # 2 m
 span = 1.000 # 4.4 m
 depth = 0.120 # 0.4 m
 dim = 2
-factor = 1/1000
+factor = 1/500
 Nx = int(span / factor)
 Ny = int(depth / factor)
 n_particles = int(Nx * Ny)
-grid_factor = 4
+grid_factor = 16
 n_grid = 16*grid_factor
 
 p_vol = (span / Nx) * (depth / Ny)
@@ -85,9 +85,9 @@ disp = ti.Vector.field(dim,
                     shape=(max_steps, n_particles),
                     needs_grad=True)
 
-ti.root.lazy_grad()
+# ti.root.lazy_grad()
 
-
+print('fields allocated')
 
 
 # @ti.kernel
@@ -253,8 +253,8 @@ def assign_ext_load():
     for t in ti.ndrange(max_steps):
             f_ext[t, 4*grid_factor, 8*grid_factor] = [-load, 0]
             f_ext[t, 4*grid_factor, 9*grid_factor] = [-load, 0]
-            f_ext[t, 13*grid_factor-3, 8*grid_factor] = [load, 0]
-            f_ext[t, 13*grid_factor-3, 9*grid_factor] = [load, 0]
+            f_ext[t, 12*grid_factor+1, 8*grid_factor] = [load, 0]
+            f_ext[t, 12*grid_factor+1, 9*grid_factor] = [load, 0]
 
 
 
@@ -272,11 +272,12 @@ def assign_E():
     for p in range(n_particles):
         F[0, p] = [[1, 0], [0, 1]]
 
-width = 5
+width = int((5 / grid_factor) / 100)
+crack_start = int(0.2*Nx)
 
 for i in range(Nx):
     for j in range(Ny):
-        if (i>20 and i<=20+width) or (i>=80-width and i<80):
+        if (i>crack_start and i<=crack_start+width) or (i>=Nx-crack_start-width and i<Nx-crack_start):
             E[j*Nx+i] = 25e8*0.12
         else:
             E[j*Nx+i] = 25e9*0.12

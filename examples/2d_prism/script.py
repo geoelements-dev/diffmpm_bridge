@@ -13,12 +13,12 @@ n_blocks_ys = ["1"]
 
 widths = ["1", "5"]
 
-
+n_blocks_xs = [str(int(i)*5) for i in n_blocks_xs]
 # The target script name
 # target_script = "cs_true.py"
 target_script_damaged = "script_opt.py"
 
-max_concurrent_processes = 3
+max_concurrent_processes = 1
 
 # def run_true(case, semaphore):
 #     result_filename = f"s_cs_{case}_f.npy"
@@ -35,7 +35,7 @@ max_concurrent_processes = 3
 
 
 def run_until_done(obs, snapshot, losstype, n_blocks_x, n_blocks_y, width, semaphore):
-    result_filename = f"results/r_4_{obs}_{losstype}_{snapshot}_{n_blocks_x}_{n_blocks_y}_{width}.json"
+    result_filename = f"results/r_16_0.002_{obs}_{losstype}_{snapshot}_{n_blocks_x}_{n_blocks_y}_{width}.json"
     
     with semaphore:
         while not os.path.exists(result_filename):
@@ -60,7 +60,7 @@ if __name__ == "__main__":
     #     p_true.join()
 
     combinations = list(itertools.product(obs_choices, snapshots, losstypes, n_blocks_xs,  n_blocks_ys, widths))
-    appends = list(itertools.product(['full'], ["hist", "snap"], ["disp", "strain"], ["100"], ["12"], ["1", "5"]))
+    appends = list(itertools.product(['full'], ["hist", "snap"], ["disp", "strain"], ["500"], ["60"], ["1", "5"]))
     for item in appends:
         combinations.append(item)
     semaphore = multiprocessing.Semaphore(max_concurrent_processes)
