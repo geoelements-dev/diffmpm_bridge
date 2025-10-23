@@ -18,4 +18,6 @@ source start_venv_frontera.sh
 # mkdir "results"
 
 # Run Training
+python true_randomized.py
+python true_randomized_1.py
 python script.py
