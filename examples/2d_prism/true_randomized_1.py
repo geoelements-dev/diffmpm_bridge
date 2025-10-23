@@ -272,7 +272,7 @@ def assign_E():
     for p in range(n_particles):
         F[0, p] = [[1, 0], [0, 1]]
 
-width = int((1 / grid_factor) / 100)
+width = int((1 / factor) / 100)
 crack_start = int(0.2*Nx)
 
 for i in range(Nx):
