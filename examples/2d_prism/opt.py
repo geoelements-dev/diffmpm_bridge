@@ -14,11 +14,11 @@ size = 2.000 # 2 m
 span = 1.000 # 4.4 m
 depth = 0.120 # 0.4 m
 dim = 2
-factor = 1/100
+factor = 1/500
 Nx = int(span / factor)
 Ny = int(depth / factor)
 n_particles = int(Nx * Ny)
-grid_factor = 1
+grid_factor = 16
 n_grid = 16*grid_factor
 
 p_vol = (span / Nx) * (depth / Ny)
@@ -254,8 +254,8 @@ def assign_ext_load():
     for t in ti.ndrange(max_steps):
             f_ext[t, 4*grid_factor, 8*grid_factor] = [-load, 0]
             f_ext[t, 4*grid_factor, 9*grid_factor] = [-load, 0]
-            f_ext[t, 13*grid_factor, 8*grid_factor] = [load, 0]
-            f_ext[t, 13*grid_factor, 9*grid_factor] = [load, 0]
+            f_ext[t, 12*grid_factor+1, 8*grid_factor] = [load, 0]
+            f_ext[t, 12*grid_factor+1, 9*grid_factor] = [load, 0]
 
 @ti.kernel
 def init_exp():
@@ -347,7 +347,7 @@ print('loading target')
 
 obs = 'full'
 
-widths = [1, 5]
+widths = [5, 25]
 width = widths[0]
 
 snapshots = ["snap", "hist"]
@@ -372,8 +372,8 @@ print('loading target')
 init_exp()
 
 
-target_strain_np = np.load(f's_{width}.npy')
-target_x_np = np.load(f'x_{width}.npy')
+target_strain_np = np.load(f'results/s_pf_{factor}_gf_{grid_factor}_cw_{width}.npy')
+target_x_np = np.load(f'results/x_pf_{factor}_gf_{grid_factor}_cw_{width}.npy')
 target_x = ti.Vector.field(dim,
                     dtype=real,
                     shape=(max_steps, n_particles),
@@ -521,5 +521,5 @@ if optim == 'lbfgs':
         "time" : t2-t1
     }
 
-    # with open(f"results/r_{obs}_{losstype}_{snapshot}_{n_blocks_x}_{n_blocks_y}.json", "w") as outfile: 
-    #     json.dump(result_dict, outfile)
+    with open(f"results/r_16_0.002_{obs}_{losstype}_{snapshot}_{n_blocks_x}_{n_blocks_y}_{width}.json", "w") as outfile: 
+        json.dump(result_dict, outfile)
