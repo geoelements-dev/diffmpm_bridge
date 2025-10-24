@@ -1,6 +1,6 @@
 #!/bin/bash
 
-ml cuda/12.0
+ml cuda/12.2
 # ml cudnn
 # ml nccl
 
