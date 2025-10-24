@@ -10,6 +10,6 @@ module load mvapich2-gdr/2.3.7
 module load mvapich2/2.3.7
 
 module load phdf5/1.10.4
-module load python3/3.9.7
+module load python3/3.9.2
 
 export LD_LIBRARY_PATH=/usr/lib64:$LD_LIBRARY_PATH
