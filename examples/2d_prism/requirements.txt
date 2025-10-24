@@ -2,5 +2,4 @@ matplotlib
 einops
 numpy
 argparse
-time
 scipy
