@@ -7,7 +7,19 @@ ti.reset()
 real = ti.f32
 ti.init(arch=ti.cuda, default_fp=real, device_memory_GB=11)
 
+n_blocks_x = 100
+n_blocks_y = 12
 
+losstypes = ['strain', 'disp']
+
+losstype = losstypes[1]
+obs = 'full'
+
+widths = [2, 10]
+width = widths[1]
+
+snapshots = ["snap", "hist"]
+snapshot = snapshots[1]
 
 # init parameters
 size = 2.000 # 2 m
@@ -323,12 +335,7 @@ def substep(s):
     grid_op(s)
     g2p(s)
 
-n_blocks_x = 100
-n_blocks_y = 12
 
-losstypes = ['strain', 'disp']
-
-losstype = losstypes[1]
 
 n_blocks = n_blocks_y * n_blocks_x
 block_nx = int(Nx / n_blocks_x)
@@ -345,13 +352,7 @@ def assign_E():
 
 print('loading target')
 
-obs = 'full'
 
-widths = [2, 10]
-width = widths[1]
-
-snapshots = ["snap", "hist"]
-snapshot = snapshots[1]
 
 
 n_blocks = n_blocks_y * n_blocks_x
@@ -520,9 +521,6 @@ if optim == 'lbfgs':
         "losses" : losses,
         "time" : t2-t1
     }
-
-    if len(losses) < 5:
-        quit()
 
     with open(f"results/r_{grid_factor}_{factor}_{obs}_{losstype}_{snapshot}_{n_blocks_x}_{n_blocks_y}_{width}.json", "w") as outfile: 
         json.dump(result_dict, outfile)
