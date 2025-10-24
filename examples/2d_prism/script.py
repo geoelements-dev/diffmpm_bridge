@@ -12,7 +12,7 @@ losstypes = [ "disp", "strain"]
 n_blocks_xs = ["200", "100", "50", "20", "10"]
 n_blocks_ys = ["1"]
 
-widths = ["2", "10"]
+widths = ["2"]#, "10"]
 
 # n_blocks_xs = [str(int(i)*2) for i in n_blocks_xs]
 # The target script name
@@ -45,11 +45,11 @@ def run_until_done(obs, snapshot, losstype, n_blocks_x, n_blocks_y, width, semap
             print(f"[{obs} | {snapshot} | {losstype} | {n_blocks_x} | {n_blocks_y} | {width}] Result not found. Running script...")
             try:
                 subprocess.run(["python", target_script_damaged, obs, snapshot, losstype, n_blocks_x, n_blocks_y, width], check=True)
-                # if os.path.exists(result_filename) and counter < 3:
-                #     with open(result_filename) as json_file:
-                #         iters = len(json.load(json_file)['losses'])
-                #         if iters < 4:
-                #             os.remove(result_filename)
+                if os.path.exists(result_filename) and counter < 3:
+                    with open(result_filename) as json_file:
+                        iters = len(json.load(json_file)['losses'])
+                        if iters < 4:
+                            os.remove(result_filename)
 
             except subprocess.CalledProcessError as e:
                 print(f"Error running script for ({obs} | {snapshot} | {losstype} | {n_blocks_x} | {n_blocks_y} | {width}): {e}")
