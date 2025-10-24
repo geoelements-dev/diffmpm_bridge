@@ -48,7 +48,7 @@ for obs, snapshot, losstype, width in combinations:
 
     fig, axs = plt.subplots(7,1, sharex=True, sharey=True, figsize=(4,6), layout='constrained')
     plt.suptitle(f"{obs} observability, {snapshot}, {losstype}, {width} crack width")
-    if width == "1":
+    if width == "2":
         E_true = E_1
     else:
         E_true = E_5
