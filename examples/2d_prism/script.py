@@ -1,5 +1,6 @@
 import subprocess
 import time
+import json
 import os
 import itertools
 import multiprocessing
@@ -38,10 +39,18 @@ def run_until_done(obs, snapshot, losstype, n_blocks_x, n_blocks_y, width, semap
     result_filename = f"results/r_8_0.005_{obs}_{losstype}_{snapshot}_{n_blocks_x}_{n_blocks_y}_{width}.json"
     
     with semaphore:
+        counter = 0
         while not os.path.exists(result_filename):
+            counter += 1
             print(f"[{obs} | {snapshot} | {losstype} | {n_blocks_x} | {n_blocks_y} | {width}] Result not found. Running script...")
             try:
                 subprocess.run(["python", target_script_damaged, obs, snapshot, losstype, n_blocks_x, n_blocks_y, width], check=True)
+                if os.path.exists(result_filename) and counter < 3:
+                    with open(result_filename) as json_file:
+                        iters = len(json.load(json_file)['losses'])
+                        if iters < 4:
+                            os.remove(result_filename)
+
             except subprocess.CalledProcessError as e:
                 print(f"Error running script for ({obs} | {snapshot} | {losstype} | {n_blocks_x} | {n_blocks_y} | {width}): {e}")
 

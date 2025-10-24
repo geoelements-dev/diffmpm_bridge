@@ -521,7 +521,7 @@ if optim == 'lbfgs':
         "time" : t2-t1
     }
 
-    if len(losses < 3):
+    if len(losses) < 5:
         quit()
 
     with open(f"results/r_{grid_factor}_{factor}_{obs}_{losstype}_{snapshot}_{n_blocks_x}_{n_blocks_y}_{width}.json", "w") as outfile: 
