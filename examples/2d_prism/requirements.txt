@@ -1,7 +1,6 @@
 matplotlib
 einops
 numpy
-json
 argparse
 time
 scipy
