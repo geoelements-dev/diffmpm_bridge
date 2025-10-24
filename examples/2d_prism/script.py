@@ -14,7 +14,7 @@ n_blocks_ys = ["1"]
 
 widths = ["2", "10"]
 
-n_blocks_xs = [str(int(i)*2) for i in n_blocks_xs]
+# n_blocks_xs = [str(int(i)*2) for i in n_blocks_xs]
 # The target script name
 # target_script = "cs_true.py"
 target_script_damaged = "script_opt.py"

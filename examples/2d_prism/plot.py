@@ -19,10 +19,10 @@ n_particles = int(Nx * Ny)
 grid_factor = 8
 n_grid = 16*grid_factor
 
-file = "E_pf_0.005_gf_8_cw_2.npy"
+file = "results/E_pf_0.005_gf_8_cw_2.npy"
 result = np.load(file, allow_pickle=True)
 E_1 = einops.rearrange(result, "(y x) -> x y", y=Ny).transpose()
-file = "E_pf_0.005_gf_8_cw_10.npy"
+file = "results/E_pf_0.005_gf_8_cw_10.npy"
 result = np.load(file, allow_pickle=True)
 E_5 = einops.rearrange(result, "(y x) -> x y", y=Ny).transpose()
 
@@ -31,8 +31,8 @@ snapshots = ["hist", "snap"]
 losstypes = [ "disp", "strain"]
 n_blocks_xs = ["100", "50", "20", "10"]
 n_blocks_ys = ["1"]
-n_blocks_xs = [str(int(i)*2) for i in n_blocks_xs]
-widths = ["2", "10"]
+
+widths = ["2"]#, "10"]
 
 sequence = [
     "24 by 200"
