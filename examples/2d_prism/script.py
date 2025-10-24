@@ -9,12 +9,12 @@ import multiprocessing
 obs_choices = ["full"]
 snapshots = ["hist", "snap"]
 losstypes = [ "disp", "strain"]
-n_blocks_xs = ["100", "50", "20", "10"]
+n_blocks_xs = ["200", "100", "50", "20", "10"]
 n_blocks_ys = ["1"]
 
 widths = ["2", "10"]
 
-n_blocks_xs = [str(int(i)*5) for i in n_blocks_xs]
+n_blocks_xs = [str(int(i)*2) for i in n_blocks_xs]
 # The target script name
 # target_script = "cs_true.py"
 target_script_damaged = "script_opt.py"
@@ -69,7 +69,7 @@ if __name__ == "__main__":
     #     p_true.join()
 
     combinations = list(itertools.product(obs_choices, snapshots, losstypes, n_blocks_xs,  n_blocks_ys, widths))
-    appends = list(itertools.product(['full'], ["hist", "snap"], ["disp", "strain"], ["500"], ["60"], ["1", "5"]))
+    appends = list(itertools.product(['full'], ["hist", "snap"], ["disp", "strain"], ["200"], ["24"], ["2", "10"]))
     for item in appends:
         combinations.append(item)
     semaphore = multiprocessing.Semaphore(max_concurrent_processes)
