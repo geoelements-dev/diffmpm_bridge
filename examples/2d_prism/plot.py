@@ -35,7 +35,8 @@ n_blocks_xs = [str(int(i)*2) for i in n_blocks_xs]
 widths = ["2", "10"]
 
 sequence = [
-    "12 by 100",
+    "24 by 200"
+    "1 by 200",
     "1 by 100",
     "1 by 50",
     "1 by 20",
