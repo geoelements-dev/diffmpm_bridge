@@ -15,7 +15,7 @@ source venv/bin/activate
 
 python -m pip install --upgrade pip
 # install torch with CUDA 12.1 support (which matches cuda/12.2)
-pip install taichi==1.2
+pip install taichi==1.5
 
 pip install -r requirements.txt
 

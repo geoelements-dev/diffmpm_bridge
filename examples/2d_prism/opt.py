@@ -14,11 +14,11 @@ size = 2.000 # 2 m
 span = 1.000 # 4.4 m
 depth = 0.120 # 0.4 m
 dim = 2
-factor = 1/500
+factor = 1/200
 Nx = int(span / factor)
 Ny = int(depth / factor)
 n_particles = int(Nx * Ny)
-grid_factor = 16
+grid_factor = 8
 n_grid = 16*grid_factor
 
 p_vol = (span / Nx) * (depth / Ny)
@@ -521,5 +521,8 @@ if optim == 'lbfgs':
         "time" : t2-t1
     }
 
-    with open(f"results/r_16_0.002_{obs}_{losstype}_{snapshot}_{n_blocks_x}_{n_blocks_y}_{width}.json", "w") as outfile: 
+    if len(losses < 3):
+        quit()
+
+    with open(f"results/r_{grid_factor}_{factor}_{obs}_{losstype}_{snapshot}_{n_blocks_x}_{n_blocks_y}_{width}.json", "w") as outfile: 
         json.dump(result_dict, outfile)

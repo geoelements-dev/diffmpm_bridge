@@ -11,7 +11,7 @@ losstypes = [ "disp", "strain"]
 n_blocks_xs = ["100", "50", "20", "10"]
 n_blocks_ys = ["1"]
 
-widths = ["5", "25"]
+widths = ["2", "10"]
 
 n_blocks_xs = [str(int(i)*5) for i in n_blocks_xs]
 # The target script name
@@ -35,7 +35,7 @@ max_concurrent_processes = 1
 
 
 def run_until_done(obs, snapshot, losstype, n_blocks_x, n_blocks_y, width, semaphore):
-    result_filename = f"results/r_16_0.002_{obs}_{losstype}_{snapshot}_{n_blocks_x}_{n_blocks_y}_{width}.json"
+    result_filename = f"results/r_8_0.005_{obs}_{losstype}_{snapshot}_{n_blocks_x}_{n_blocks_y}_{width}.json"
     
     with semaphore:
         while not os.path.exists(result_filename):
