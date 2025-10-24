@@ -301,8 +301,8 @@ def calc_disp():
 calc_disp()
 
 print(E.to_numpy().min())
-np.save(f'results/E_pf_{factor}_gf_{grid_factor}_cw_{width}.npy', E.to_numpy())
-np.save(f'results/s1_pf_{factor}_gf_{grid_factor}_cw_{width}.npy', strain.to_numpy())
+# np.save(f'results/E_pf_{factor}_gf_{grid_factor}_cw_{width}.npy', E.to_numpy())
+# np.save(f'results/s1_pf_{factor}_gf_{grid_factor}_cw_{width}.npy', strain.to_numpy())
 np.save(f'results/s_pf_{factor}_gf_{grid_factor}_cw_{width}.npy', strain2.to_numpy())
-np.save(f'results/disp_pf_{factor}_gf_{grid_factor}_cw_{width}.npy', disp.to_numpy())
+# np.save(f'results/disp_pf_{factor}_gf_{grid_factor}_cw_{width}.npy', disp.to_numpy())
 np.save(f'results/x_pf_{factor}_gf_{grid_factor}_cw_{width}.npy', x.to_numpy())

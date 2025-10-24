@@ -11,7 +11,7 @@ losstypes = [ "disp", "strain"]
 n_blocks_xs = ["100", "50", "20", "10"]
 n_blocks_ys = ["1"]
 
-widths = ["1", "5"]
+widths = ["5", "25"]
 
 n_blocks_xs = [str(int(i)*5) for i in n_blocks_xs]
 # The target script name
