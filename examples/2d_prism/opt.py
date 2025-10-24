@@ -347,8 +347,8 @@ print('loading target')
 
 obs = 'full'
 
-widths = [5, 25]
-width = widths[0]
+widths = [2, 10]
+width = widths[1]
 
 snapshots = ["snap", "hist"]
 snapshot = snapshots[1]
