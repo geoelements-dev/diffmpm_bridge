@@ -35,7 +35,7 @@ n_blocks_ys = ["1"]
 widths = ["2"]#, "10"]
 
 sequence = [
-    "24 by 200"
+    "24 by 200",
     "1 by 200",
     "1 by 100",
     "1 by 50",
@@ -54,7 +54,7 @@ for obs, snapshot, losstype, width in combinations:
         E_true = E_5
     im = axs[0].imshow(E_true, origin='lower', cmap='Greys', vmin=0, vmax=4e9)
     filename = [
-        f"results/r_8_0.005_{obs}_{losstype}_{snapshot}_200_24_{width}.json"
+        f"results/r_8_0.005_{obs}_{losstype}_{snapshot}_200_24_{width}.json",
         f"results/r_8_0.005_{obs}_{losstype}_{snapshot}_200_1_{width}.json",
         f"results/r_8_0.005_{obs}_{losstype}_{snapshot}_100_1_{width}.json",
         f"results/r_8_0.005_{obs}_{losstype}_{snapshot}_50_1_{width}.json",
