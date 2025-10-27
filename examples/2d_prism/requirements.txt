@@ -3,3 +3,4 @@ einops
 numpy
 argparse
 scipy
+latex
