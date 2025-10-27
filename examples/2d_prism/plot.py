@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
 
-matplotlib.rc('text', usetex = True)
+# matplotlib.rc('text', usetex = True)
 plt.rcParams["font.family"] = "Times New Roman"
 plt.rcParams['figure.dpi'] = 300
 font = {'size'   : 20}
