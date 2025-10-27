@@ -73,7 +73,7 @@ for obs, snapshot, losstype, width in combinations:
     fig.colorbar(im, 
                 ax=axs, 
                 orientation = 'horizontal', 
-                label='Young\'s Modulus (Pa)', 
+                # label='Young\'s Modulus (Pa)', 
                 aspect=200)
     plt.show()
     plt.savefig(f"results/fig_E_8_0.005_{losstype}_{snapshot}_{width}.png", dpi=300)
