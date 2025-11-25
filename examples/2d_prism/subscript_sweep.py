@@ -371,8 +371,8 @@ print('loading target')
 
 init_exp()
 
-target_strain_np = np.load(f'results/s_pf_{factor}_gf_{grid_factor}_cw_{width}_sweep.npy')
-target_x_np = np.load(f'results/x_pf_{factor}_gf_{grid_factor}_cw_{width}_sweep.npy')
+target_strain_np = np.load(f'results/s_pf_{factor}_gf_{grid_factor}_sweep.npy')
+target_x_np = np.load(f'results/x_pf_{factor}_gf_{grid_factor}_sweep.npy')
 target_x = ti.Vector.field(dim,
                     dtype=real,
                     shape=(max_steps, n_particles),
