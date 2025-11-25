@@ -440,7 +440,7 @@ def compute_loss_and_grad(params):
 
     loss_val = loss[None]
     grad_val = [E_block.grad[i] for i in range(n_blocks)]
-    losses.append(loss_val)
+    # losses.append(loss_val)
     # param_hist.append(params.tolist())
     # print(grad_val)
     # print(loss_val)

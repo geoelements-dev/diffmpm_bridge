@@ -55,6 +55,7 @@ if __name__ == "__main__":
     processes = []
     print("running combos")
     for obs, snapshot, losstype, width in combinations:
+        print(obs, snapshot, losstype, width)
         p = multiprocessing.Process(target=run_until_done, args=(obs, snapshot, losstype, width, semaphore))
         p.start()
         processes.append(p)
