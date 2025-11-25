@@ -449,7 +449,7 @@ def compute_loss_and_grad(params):
 
 
 
-param_list = np.linspace(10.0e9, 50.0e9, 2)*0.12
+param_list = np.linspace(10.0e9, 50.0e9, 401)*0.12
 losses = []
 grads = []
 for param in param_list:
