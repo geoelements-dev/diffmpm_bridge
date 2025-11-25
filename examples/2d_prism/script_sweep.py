@@ -4,6 +4,7 @@ import os
 import itertools
 import multiprocessing
 
+print("running sweep script")
 # Define the combinations
 obs_choices = ["full"]
 snapshots = ["snap"]
@@ -52,6 +53,7 @@ if __name__ == "__main__":
     semaphore = multiprocessing.Semaphore(max_concurrent_processes)
     # Launch a separate process for each combination
     processes = []
+    print("running combos")
     for obs, snapshot, losstype, width in combinations:
         p = multiprocessing.Process(target=run_until_done, args=(obs, snapshot, losstype, width, semaphore))
         p.start()
