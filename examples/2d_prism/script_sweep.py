@@ -36,7 +36,7 @@ max_concurrent_processes = 1
 
 
 def run_until_done(obs, snapshot, losstype, width, semaphore):
-    result_filename = f"results/r_8_0.005_{obs}_{losstype}_{snapshot}_1_1_sweep.json"
+    result_filename = f"results/r_8_0.005_{obs}_{losstype}_{snapshot}_1_1_sweep.png"
     
     with semaphore:
         while not os.path.exists(result_filename):

@@ -459,14 +459,14 @@ for param in param_list:
 
 
 
-result_dict = {
-    "E_hist" : param_list.tolist(),
-    "losses" : losses,
-    "grads" : grads,
-}
+# result_dict = {
+#     "E_hist" : param_list.tolist(),
+#     "losses" : losses,
+#     "grads" : grads,
+# }
 
-with open(f"results/r_{grid_factor}_{factor}_{obs}_{losstype}_{snapshot}_{n_blocks_x}_{n_blocks_y}_sweep.json", "w") as outfile: 
-    json.dump(result_dict, outfile)
+# with open(f"results/r_{grid_factor}_{factor}_{obs}_{losstype}_{snapshot}_{n_blocks_x}_{n_blocks_y}_sweep.json", "w") as outfile: 
+#     json.dump(result_dict, outfile)
 
 import matplotlib.pyplot as plt
 fig, axes = plt.subplots(3, 1, figsize=(16, 16))
