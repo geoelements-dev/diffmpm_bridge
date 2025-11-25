@@ -283,12 +283,12 @@ def compute_loss():
                 if obs == "full":
                     for j in range(n_particles):
                         dist = (target_strain[i, j] - strain2[i, j]) ** 2
-                        loss[None] += 0.5 * (dist[0, 0] + dist[1, 1] + dist[1, 0])*1e30
+                        loss[None] += 0.5 * (dist[0, 0] + dist[1, 1] + dist[1, 0])
         if snapshot == "snap":
             if obs == "full":
                 for j in range(n_particles):
                     dist = (target_strain[steps-1, j] - strain2[steps-1, j]) ** 2
-                    loss[None] += 0.5 * (dist[0, 0] + dist[1, 1] + dist[1, 0])*1e30
+                    loss[None] += 0.5 * (dist[0, 0] + dist[1, 1] + dist[1, 0])
             # elif obs == "row":
             #     for j in range(Nx):
             #         dist = (target_strain[i, j] - strain2[i, j]) ** 2
@@ -303,12 +303,12 @@ def compute_loss():
                 for i in range(steps-1):
                     for j in range(n_particles):
                         dist = (target_disp[i, j] - disp[i, j]) ** 2
-                        loss[None] += 0.5 * (dist[0] + dist[1])*1e30
+                        loss[None] += 0.5 * (dist[0] + dist[1])
         if snapshot == "snap":
             if obs == "full":
                 for j in range(n_particles):
                     dist = (target_disp[steps-1, j] - disp[steps-1, j]) ** 2
-                    loss[None] += 0.5 * (dist[0] + dist[1])*1e30
+                    loss[None] += 0.5 * (dist[0] + dist[1])
 
 @ti.kernel
 def calc_disp():
@@ -449,13 +449,13 @@ def compute_loss_and_grad(params):
 
 
 
-param_list = np.linspace(10.0e9, 50.0e9, 41)*0.12
+param_list = np.linspace(10.0e9, 50.0e9, 1)*0.12
 losses = []
 grads = []
 for param in param_list:
     lo, gr = compute_loss_and_grad([param])
     losses.append(loss)
-    grads.append(gr)
+    grads.append(gr[0])
 
 
 
