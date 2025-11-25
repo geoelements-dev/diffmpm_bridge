@@ -332,7 +332,7 @@ parser.add_argument("snapshot", type=str)
 parser.add_argument("losstype", type=str)
 # parser.add_argument("n_blocks_x", type=str)
 # parser.add_argument("n_blocks_y", type=str)
-# parser.add_argument("width", type=str)
+parser.add_argument("width", type=str)
 args = parser.parse_args()
 
 # Extract arguments
@@ -341,7 +341,7 @@ snapshot = args.snapshot
 losstype = args.losstype
 # n_blocks_x = int(args.n_blocks_x)
 # n_blocks_y = int(args.n_blocks_y)
-# width = args.width
+width = args.width
 
 n_blocks_x = 1
 n_blocks_y = 1
