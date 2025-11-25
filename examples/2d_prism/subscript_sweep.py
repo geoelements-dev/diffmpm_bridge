@@ -454,7 +454,7 @@ losses = []
 grads = []
 for param in param_list:
     lo, gr = compute_loss_and_grad([param])
-    losses.append(loss)
+    losses.append(lo)
     grads.append(gr[0])
 
 
