@@ -452,7 +452,6 @@ def compute_loss_and_grad(params):
 param_list = np.linspace(10.0e9, 50.0e9, 41)*0.12
 losses = []
 grads = []
-from tqdm import tqdm
 for param in param_list:
     loss, grad = compute_loss_and_grad(param)
     losses.append(loss)
