@@ -18,5 +18,5 @@ source start_venv_frontera.sh
 # mkdir "results"
 
 # Run Training
-python true_sweep.py
+# python true_sweep.py
 python script_sweep.py
